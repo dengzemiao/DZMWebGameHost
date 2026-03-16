@@ -16,72 +16,133 @@ Tauri 2 桌面客户端，内嵌 axum HTTP/WebSocket 服务器。用户启动服
 DZMWebGameHost
 │
 ├─ src/                                # Tauri 控制面板前端 (Vue 3)
-│   ├─ main.js                         # Vue 入口
-│   ├─ App.vue                         # 根组件，挂载 ServerControl
+│   ├─ main.js
+│   ├─ App.vue
 │   └─ components/
-│       └─ ServerControl.vue           # 控制面板：启动/停止、IP显示、在线人数、打开数据目录
+│       └─ ServerControl.vue           # 控制面板：启动/停止、IP显示、在线人数
 │
 ├─ src-tauri/                          # Rust 后端
-│   ├─ tauri.conf.json                 # Tauri 配置（identifier: com.dengzemiao.webgamehost）
-│   ├─ Cargo.toml                      # Rust 依赖（axum, rusqlite, tokio, tower-http, local-ip-address）
-│   ├─ capabilities/
-│   │   └─ default.json                # 权限配置
+│   ├─ tauri.conf.json
+│   ├─ Cargo.toml
 │   └─ src/
-│       ├─ main.rs                     # 入口，调用 lib::run()
-│       ├─ lib.rs                      # Tauri 命令注册 + setup（7个命令）
-│       ├─ state.rs                    # AppState 全局状态（server_handle, online_count, port, data_dir）
-│       │
-│       ├─ server/                     # 内嵌 Web 服务器
-│       │   ├─ mod.rs                  # start()/stop() 入口，管理 ServerInstance
-│       │   ├─ http.rs                 # axum 路由：/api/status, /api/players, fallback 静态文件
-│       │   ├─ websocket.rs            # /ws 处理：连接、消息收发、断开
-│       │   └─ lobby.rs                # 在线玩家管理、广播、DB 交互
-│       │
-│       ├─ database/                   # 数据层
-│       │   ├─ mod.rs                  # init() 初始化数据目录和数据库
-│       │   └─ sqlite.rs              # SQLite 建表、find_or_create_player(ip)、随机中文昵称生成
-│       │
+│       ├─ lib.rs                      # Tauri 命令注册（7个命令）
+│       ├─ state.rs                    # AppState
+│       ├─ server/
+│       │   ├─ mod.rs                  # start()/stop()
+│       │   ├─ http.rs                 # axum 路由
+│       │   ├─ websocket.rs            # WebSocket 消息处理（含房间消息）
+│       │   └─ lobby.rs                # 玩家+房间内存管理
+│       ├─ database/
+│       │   ├─ mod.rs
+│       │   └─ sqlite.rs               # 玩家持久化、随机昵称
 │       └─ network/
-│           └─ ip.rs                   # 获取局域网 IP（local-ip-address crate）
+│           └─ ip.rs
 │
-└─ game-pages/                         # 玩家浏览器访问的页面（axum 静态文件服务）
-    ├─ index.html                      # 游戏大厅
-    ├─ css/style.css                   # 大厅样式
-    ├─ js/lobby.js                     # WebSocket 连接、聊天、状态管理
-    └─ games/example-game/index.html   # 示例游戏占位页
+└─ game-pages/                         # 玩家浏览器页面（axum 静态服务）
+    ├─ index.html                      # 游戏大厅（高端深色主题）
+    ├─ room.html                       # 通用房间外壳
+    ├─ css/
+    │   ├─ lobby.css                   # 大厅样式
+    │   └─ room.css                    # 房间样式
+    ├─ js/
+    │   ├─ ws-client.js                # WebSocket 客户端单例
+    │   ├─ game-registry.js            # 游戏注册表（新增游戏只改此文件）
+    │   ├─ lobby.js                    # 大厅逻辑（房间列表、创建、聊天）
+    │   └─ room.js                     # 通用房间逻辑（不含游戏代码）
+    └─ games/
+        └─ chess/                      # 中国象棋（自治）
+            ├─ game.js                 # ChessGameAdapter + ChessRules
+            ├─ ai.js                   # AI（Minimax + Alpha-Beta，三档难度）
+            └─ game.css
 ```
 
-## Tauri 命令（lib.rs → Vue invoke 调用）
+## 游戏插件化架构
 
-| 命令 | 功能 |
-|------|------|
-| `start_server` | 启动 axum 服务器，返回访问地址 |
-| `stop_server` | 广播 server_stopping → 关闭服务器 |
-| `get_server_status` | 返回 { running, online_count, address, port, local_ip } |
-| `get_local_ip` | 获取局域网 IP |
-| `set_port` | 修改端口（服务未运行时） |
-| `open_data_dir` | 打开数据存储目录 |
-| `get_online_count` | 获取在线人数 |
+### 核心原则
 
-## 数据存储
+新增游戏只需：1）创建 `games/xxx/` 目录；2）在 `game-registry.js` 加一行。其余代码零改动。
 
-- **位置**：Tauri `app_data_dir`（macOS: `~/Library/Application Support/com.dengzemiao.webgamehost/`）
-- **数据库**：`game.db`（SQLite，bundled 编译，免安装）
-- **表结构**：players（id, name, ip_address UNIQUE, connected_at, last_active）、game_records、server_config
-- **玩家识别**：按 IP 唯一识别，首次连接自动生成随机中文昵称（如"霸气剑客42"），再次连接复用
+### GameAdapter 标准接口
+
+每款游戏的 `game.js` 必须暴露一个类并实现以下接口：
+
+```js
+class XxxGameAdapter {
+  constructor(container, config)
+  // config: { role, roomType, aiDifficulty, mySessionId, isSpectator }
+  init()                    // 初始化渲染
+  onGameStart(roomData)     // 游戏开始
+  onRemoteAction(data)      // 收到对手操作（PvP）
+  onOpponentLeave()         // 对手离开
+  // 以下两个由 room.js 注入：
+  // sendAction(data)       // 发送 game_action 给对手
+  // notifyGameOver(result) // 通知游戏结束
+}
+```
+
+## 房间系统
+
+### 内存数据结构（lobby.rs）
+
+```rust
+Room {
+  id: String,              // 6位随机ID（大写字母+数字）
+  name: String,
+  game: String,            // "chess" 等，与 GAME_REGISTRY key 对应
+  max_players: usize,
+  room_type: RoomType,     // Pvp | PvAI
+  ai_difficulty: Option<AiDifficulty>,  // Easy | Normal | Hard
+  allow_spectate: bool,
+  state: RoomState,        // Waiting | Playing
+  players: Vec<RoomPlayer>,
+  spectators: Vec<usize>,
+  surrender_votes: Vec<usize>,
+}
+```
+
+### 房间规则
+
+- 所有人离开 → 房间自动销毁
+- 玩家位置满 → 状态自动变为 Playing
+- 参战玩家离开 → 状态回退为 Waiting
+- 双人游戏：任意一方认输即结束
+- PvAI 模式：AI 逻辑在前端运行，服务端不参与计算
 
 ## WebSocket 消息协议
 
+### 基础消息
+
 | 类型 | 方向 | 字段 |
 |------|------|------|
-| `welcome` | 服务端→客户端 | player_id, session_id, name, online_count |
-| `player_count` | 服务端→广播 | count |
+| `welcome` | 服→客 | player_id, session_id, name, online_count |
+| `player_count` | 服→广播 | count |
 | `chat` | 双向 | session_id, name, content |
-| `set_name` | 客户端→服务端 | name |
-| `server_stopping` | 服务端→广播 | （客户端收到后停止重连） |
+| `set_name` | 客→服 | name |
+| `server_stopping` | 服→广播 | — |
+
+### 房间消息
+
+| 类型 | 方向 | 字段 |
+|------|------|------|
+| `get_rooms` | 客→服 | — |
+| `room_list` | 服→客 | rooms[] |
+| `room_list_update` | 服→全播 | rooms[] |
+| `create_room` | 客→服 | name, game, max_players, room_type, ai_difficulty, allow_spectate |
+| `room_created` | 服→客 | room |
+| `join_room` | 客→服 | room_id, as_spectator |
+| `room_joined` | 服→客 | room |
+| `leave_room` | 客→服 | — |
+| `room_updated` | 服→房间广播 | room |
+| `room_closed` | 服→房间 | room_id |
+| `room_error` | 服→客 | message |
+| `switch_role` | 客→服 | to_spectator |
+| `surrender` | 客→服 | — |
+| `game_action` | 双向转发 | action + 游戏数据（不透明） |
+| `room_chat` | 双向 | content, name, system |
+| `game_over` | 服→房间 | winner_role, reason |
 
 ## 关键配置
 
-- 默认端口：`39527`（state.rs + ServerControl.vue）
+- 默认端口：`39527`
 - 开发模式 game-pages 路径：`CARGO_MANIFEST_DIR/../game-pages`
-- 生产模式 game-pages 路径：`resource_dir/game-pages`（tauri.conf.json resources 打包）
+- 生产模式 game-pages 路径：`resource_dir/game-pages`

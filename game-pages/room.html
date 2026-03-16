@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>房间 — 游戏大厅</title>
+  <link rel="stylesheet" href="css/room.css" />
+</head>
+<body>
+  <!-- ── 顶部栏 ── -->
+  <header class="room-topbar">
+    <button class="btn-back" id="btnBack">← 返回大厅</button>
+    <div class="room-title-area">
+      <span class="room-game-icon" id="roomGameIcon">🎮</span>
+      <div>
+        <div class="room-name" id="roomName">加载中...</div>
+        <div class="room-meta-line">
+          <span class="room-id-label">ID: <strong id="roomIdLabel">------</strong></span>
+          <span class="room-type-label" id="roomTypeLabel">—</span>
+          <span class="room-state-badge" id="roomStateBadge">等待中</span>
+        </div>
+      </div>
+    </div>
+    <div class="room-topbar-right">
+      <div class="status-pill" id="statusPill">
+        <span class="status-dot" id="statusDot"></span>
+        <span id="statusText">连接中...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- ── 主体 ── -->
+  <div class="room-layout">
+
+    <!-- ── 左侧：玩家席位 + 操作 ── -->
+    <aside class="players-panel">
+      <div class="panel-section">
+        <div class="panel-title">⚔️ 参战席位</div>
+        <div class="player-seats" id="playerSeats">
+          <div class="seat empty"><span class="seat-icon">➕</span><span class="seat-label">空位</span></div>
+          <div class="seat empty"><span class="seat-icon">➕</span><span class="seat-label">空位</span></div>
+        </div>
+      </div>
+
+      <div class="panel-section" id="spectatorSection" style="display:none">
+        <div class="panel-title">👁️ 观战 <span class="spec-count" id="spectatorCount">0</span></div>
+        <div class="spectator-list" id="spectatorList"></div>
+      </div>
+
+      <!-- 操作按钮区 -->
+      <div class="action-buttons">
+        <button class="btn-action btn-spectate" id="btnSpectate" style="display:none">👁️ 切换观战</button>
+        <button class="btn-action btn-participate" id="btnParticipate" style="display:none">⚔️ 申请参战</button>
+        <button class="btn-action btn-surrender" id="btnSurrender" style="display:none">🏳️ 认输</button>
+      </div>
+
+      <!-- AI 难度显示（人机模式） -->
+      <div class="ai-info" id="aiInfo" style="display:none">
+        <div class="ai-info-icon">🤖</div>
+        <div>
+          <div class="ai-info-title">人机对战</div>
+          <div class="ai-info-level" id="aiLevelLabel">普通难度</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ── 中央：游戏区域 ── -->
+    <main class="game-area">
+      <div class="game-container" id="gameContainer">
+        <!-- 等待开始占位 -->
+        <div class="game-waiting" id="gameWaiting">
+          <div class="waiting-icon">⏳</div>
+          <div class="waiting-title">等待玩家加入</div>
+          <div class="waiting-desc" id="waitingDesc">还需要 <strong id="waitingNeed">1</strong> 名玩家加入才能开始</div>
+        </div>
+      </div>
+    </main>
+
+    <!-- ── 右侧：房间聊天 ── -->
+    <aside class="room-chat-panel">
+      <div class="panel-section" style="flex:1; display:flex; flex-direction:column; overflow:hidden;">
+        <div class="panel-title">💬 房间聊天</div>
+        <div class="room-chat-messages" id="roomChatBox"></div>
+      </div>
+      <div class="room-chat-input-area">
+        <input type="text" id="roomChatInput" placeholder="输入消息..." class="room-chat-input" maxlength="200" />
+        <button class="btn-send" id="roomSendBtn">发送</button>
+      </div>
+    </aside>
+  </div>
+
+  <!-- ── 认输确认弹窗 ── -->
+  <div class="modal-overlay" id="surrenderModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3>🏳️ 确认认输</h3>
+      </div>
+      <div class="modal-body">
+        <p style="color:var(--text-sec);font-size:14px;">确定要认输吗？认输后本局游戏将结束。</p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" id="btnCancelSurrender">取消</button>
+        <button class="btn-danger" id="btnConfirmSurrender">确认认输</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── 游戏结束弹窗 ── -->
+  <div class="modal-overlay" id="gameOverModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h3 id="gameOverTitle">游戏结束</h3>
+      </div>
+      <div class="modal-body" style="text-align:center; padding: 24px;">
+        <div class="game-over-icon" id="gameOverIcon" style="font-size:52px; margin-bottom:12px;">🏆</div>
+        <div class="game-over-msg" id="gameOverMsg" style="font-size:18px; font-weight:600; color:var(--text);"></div>
+        <div class="game-over-sub" id="gameOverSub" style="font-size:13px; color:var(--text-sec); margin-top:8px;"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-cancel" id="btnBackToLobby">返回大厅</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="js/game-registry.js"></script>
+  <script src="js/ws-client.js"></script>
+  <script src="js/room.js"></script>
+</body>
+</html>

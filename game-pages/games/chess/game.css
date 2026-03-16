@@ -1,0 +1,272 @@
+/* ══════════════════════════════════════════════════════════════════════════════
+   中国象棋棋盘样式
+   ════════════════════════════════════════════════════════════════════════════ */
+
+.chess-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  padding: 12px;
+  gap: 10px;
+  user-select: none;
+}
+
+/* ── 棋盘外框 ──────────────────────────────────────────────────────────────── */
+.chess-board-outer {
+  position: relative;
+  background: linear-gradient(145deg, #c9974a 0%, #b8823a 40%, #a06e2c 100%);
+  border: 4px solid #6b4520;
+  border-radius: 6px;
+  box-shadow:
+    0 12px 40px rgba(0,0,0,.7),
+    0 2px 0 rgba(255,255,255,.08) inset,
+    0 -2px 0 rgba(0,0,0,.3) inset;
+}
+
+.chess-board-inner {
+  position: relative;
+  padding: 28px;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      transparent 0px,
+      transparent 53px,
+      rgba(100,60,10,.06) 53px,
+      rgba(100,60,10,.06) 54px
+    ),
+    repeating-linear-gradient(
+      0deg,
+      transparent 0px,
+      transparent 53px,
+      rgba(100,60,10,.06) 53px,
+      rgba(100,60,10,.06) 54px
+    );
+}
+
+/* ── 棋盘格线 ──────────────────────────────────────────────────────────────── */
+.chess-grid {
+  position: relative;
+}
+
+.chess-grid canvas {
+  display: block;
+}
+
+/* ── 棋子容器（绝对定位覆盖在 canvas 上方） ───────────────────────────────── */
+.chess-pieces {
+  position: absolute;
+  top: 0; left: 0;
+  pointer-events: none;
+}
+
+/* ── 棋子 ──────────────────────────────────────────────────────────────────── */
+.chess-piece {
+  position: absolute;
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 19px;
+  font-weight: 900;
+  cursor: default;        /* 默认不可点击游标 */
+  pointer-events: all;
+  transform: translate(-50%, -50%);
+  transition: transform .12s ease, box-shadow .12s ease, opacity .15s;
+  z-index: 10;
+  border: 2px solid;
+  font-family: 'PingFang SC', 'Hiragino Sans GB', 'STKaiti', 'KaiTi', serif;
+  letter-spacing: 0;
+}
+
+.chess-piece.red {
+  background: radial-gradient(circle at 32% 30%, #ff8f8f 0%, #e03a3a 45%, #9e1f1f 100%);
+  border-color: #7a1515;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0,0,0,.6);
+  box-shadow:
+    0 4px 10px rgba(0,0,0,.5),
+    inset 0 2px 0 rgba(255,255,255,.35),
+    inset 0 -1px 0 rgba(0,0,0,.2);
+}
+
+.chess-piece.black {
+  background: radial-gradient(circle at 32% 30%, #6a6a6a 0%, #2e2e2e 45%, #111 100%);
+  border-color: #000;
+  color: #e8e8e8;
+  text-shadow: 0 1px 2px rgba(0,0,0,.9);
+  box-shadow:
+    0 4px 10px rgba(0,0,0,.6),
+    inset 0 2px 0 rgba(255,255,255,.15),
+    inset 0 -1px 0 rgba(0,0,0,.4);
+}
+
+/* 可移动棋子（己方回合的己方棋子）：显示手型游标 + hover 放大 */
+.chess-piece.movable {
+  cursor: pointer;
+}
+.chess-piece.movable:hover {
+  transform: translate(-50%, -50%) scale(1.1);
+  z-index: 20;
+}
+
+/* 选中状态：强金色光晕 + 脉冲动画 */
+.chess-piece.selected {
+  transform: translate(-50%, -50%) scale(1.14) !important;
+  box-shadow:
+    0 0 0 3px #f0c000,
+    0 0 14px 5px rgba(240,192,0,.65),
+    0 4px 14px rgba(0,0,0,.5) !important;
+  z-index: 20;
+  cursor: pointer;
+  animation: piece-selected-pulse 1s ease-in-out infinite alternate;
+}
+
+@keyframes piece-selected-pulse {
+  from { box-shadow: 0 0 0 3px #f0c000, 0 0 10px 3px rgba(240,192,0,.5), 0 4px 14px rgba(0,0,0,.5); }
+  to   { box-shadow: 0 0 0 3px #f0c000, 0 0 18px 7px rgba(240,192,0,.75), 0 4px 14px rgba(0,0,0,.5); }
+}
+
+.chess-piece.last-move {
+  box-shadow:
+    0 0 0 2px #58a6ff,
+    0 0 8px rgba(88,166,255,.5),
+    0 4px 10px rgba(0,0,0,.4);
+}
+
+/* ── 可移动位置标记（空格目标） ────────────────────────────────────────────── */
+.move-hint {
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(240,192,0,.6);
+  border: 2.5px solid rgba(240,192,0,.95);
+  transform: translate(-50%, -50%);
+  pointer-events: all;
+  cursor: pointer;
+  z-index: 12;
+  animation: hint-pulse .7s infinite alternate;
+}
+
+@keyframes hint-pulse {
+  from { transform: translate(-50%, -50%) scale(.8);  opacity: .65; }
+  to   { transform: translate(-50%, -50%) scale(1.1); opacity: 1; }
+}
+
+/* 可吃子目标：直接在棋子上叠加红色圆环 */
+.chess-piece.capture-target {
+  box-shadow:
+    0 0 0 3px rgba(248,81,73,.9),
+    0 0 10px 2px rgba(248,81,73,.6),
+    0 4px 10px rgba(0,0,0,.5) !important;
+  cursor: pointer;
+  z-index: 15;
+  animation: capture-pulse .6s infinite alternate;
+}
+
+@keyframes capture-pulse {
+  from { box-shadow: 0 0 0 3px rgba(248,81,73,.8), 0 0 8px rgba(248,81,73,.5), 0 4px 10px rgba(0,0,0,.5); }
+  to   { box-shadow: 0 0 0 4px rgba(248,81,73,1),  0 0 16px rgba(248,81,73,.8), 0 4px 10px rgba(0,0,0,.5); }
+}
+
+/* ── 将军闪烁 ──────────────────────────────────────────────────────────────── */
+.chess-piece.in-check {
+  animation: check-blink .35s infinite alternate;
+}
+
+@keyframes check-blink {
+  from { box-shadow: 0 0 0 3px #f85149, 0 0 10px rgba(248,81,73,.5); }
+  to   { box-shadow: 0 0 0 5px #f85149, 0 0 20px rgba(248,81,73,.85); }
+}
+
+/* ── 状态栏 ────────────────────────────────────────────────────────────────── */
+.chess-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: 500px;
+  padding: 8px 16px;
+  background: rgba(0,0,0,.3);
+  border: 1px solid rgba(255,255,255,.1);
+  border-radius: 10px;
+  font-size: 13px;
+  backdrop-filter: blur(4px);
+  gap: 8px;
+}
+
+.chess-turn-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.turn-dot {
+  width: 13px; height: 13px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: background .3s, box-shadow .3s;
+}
+.turn-dot.red {
+  background: #e05454;
+  box-shadow: 0 0 8px #e05454, 0 0 2px #e05454;
+}
+.turn-dot.black {
+  background: #aaa;
+  box-shadow: 0 0 8px #aaa;
+}
+
+.chess-check-notice {
+  color: #f85149;
+  font-weight: 800;
+  font-size: 13px;
+  letter-spacing: .5px;
+  animation: notice-fade .8s infinite alternate;
+  flex-shrink: 0;
+}
+@keyframes notice-fade {
+  from { opacity: .65; } to { opacity: 1; }
+}
+
+.chess-move-count {
+  color: rgba(255,255,255,.45);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+/* ── AI 思考提示 ────────────────────────────────────────────────────────────── */
+.chess-ai-thinking {
+  display: none;
+  align-items: center;
+  gap: 7px;
+  font-size: 13px;
+  color: #f0c000;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.chess-ai-thinking.active { display: flex; }
+.ai-spinner {
+  width: 14px; height: 14px;
+  border: 2px solid rgba(240,192,0,.3);
+  border-top-color: #f0c000;
+  border-radius: 50%;
+  animation: spin .7s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── 河界标注 ────────────────────────────────────────────────────────────────── */
+.chess-river-label {
+  position: absolute;
+  font-size: 14px;
+  color: rgba(80,50,10,.6);
+  font-family: 'STKaiti', 'KaiTi', serif;
+  letter-spacing: 12px;
+  pointer-events: none;
+}
