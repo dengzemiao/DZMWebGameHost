@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>游戏大厅 - DZMWebGameHost</title>
+  <link rel="stylesheet" href="css/style.css" />
+</head>
+<body>
+  <div id="app">
+    <header class="header">
+      <h1>游戏大厅</h1>
+      <div class="status-bar">
+        <span class="dot" id="statusDot"></span>
+        <span id="statusText">连接中...</span>
+        <span class="online-badge">在线: <strong id="onlineCount">0</strong></span>
+      </div>
+    </header>
+
+    <main class="main">
+      <section class="game-list">
+        <h2>选择游戏</h2>
+        <div class="games-grid" id="gamesGrid">
+          <a href="games/example-game/index.html" class="game-card">
+            <div class="game-icon">🎮</div>
+            <div class="game-info">
+              <h3>示例游戏</h3>
+              <p>一个简单的多人聊天互动示例</p>
+            </div>
+          </a>
+        </div>
+      </section>
+
+      <section class="chat-section">
+        <h2>公共聊天</h2>
+        <div class="chat-box" id="chatBox"></div>
+        <div class="chat-input-row">
+          <input type="text" id="nameInput" placeholder="你的名字" class="name-input" />
+          <input type="text" id="chatInput" placeholder="输入消息..." class="chat-input" />
+          <button id="sendBtn" class="btn-send">发送</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="js/lobby.js"></script>
+</body>
+</html>
