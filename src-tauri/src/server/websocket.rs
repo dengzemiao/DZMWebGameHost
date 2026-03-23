@@ -155,8 +155,9 @@ async fn handle_message(lobby: &Lobby, session_id: usize, ip: String, msg: serde
             let room_type = parse_room_type(msg.get("room_type").and_then(|v| v.as_str()));
             let ai_difficulty = parse_ai_difficulty(msg.get("ai_difficulty").and_then(|v| v.as_str()));
             let allow_spectate = msg.get("allow_spectate").and_then(|v| v.as_bool()).unwrap_or(true);
+            let game_config = msg.get("game_config").cloned();
 
-            match lobby.create_room(session_id, ip.clone(), name, game, max_players, room_type, ai_difficulty, allow_spectate).await {
+            match lobby.create_room(session_id, ip.clone(), name, game, max_players, room_type, ai_difficulty, allow_spectate, game_config).await {
                 Ok(room) => {
                     let resp = serde_json::json!({
                         "type": "room_created",
@@ -234,23 +235,91 @@ async fn handle_message(lobby: &Lobby, session_id: usize, ip: String, msg: serde
             }
         }
 
+        // ── PvP 换位（点击空位换到红/黑） ─────────────────────────────────────
+        "switch_seat" => {
+            let target_role = msg.get("target_role").and_then(|v| v.as_str()).unwrap_or("");
+            if target_role.is_empty() {
+                send_error(lobby, session_id, "缺少 target_role").await;
+            } else {
+                match lobby.switch_seat(session_id, target_role).await {
+                    Ok(_) => {}
+                    Err(e) => send_error(lobby, session_id, &e).await,
+                }
+            }
+        }
+
         // ── 认输 ──────────────────────────────────────────────────────────────
         "surrender" => {
             lobby.vote_surrender(session_id).await;
         }
 
-        // ── 游戏动作（转发给同房间其他成员） ─────────────────────────────────
+        // ── 再来一局（PvP：重置房间状态，广播给所有人重置棋盘） ─────────────
+        "restart_game" => {
+            if let Some(room) = lobby.restart_game(session_id).await {
+                let name = get_player_name(lobby, session_id).await;
+                let notice = serde_json::json!({
+                    "type": "room_chat",
+                    "system": true,
+                    "content": format!("{}发起了新一局", name)
+                }).to_string();
+                lobby.broadcast_to_room(&room.id, &notice).await;
+            }
+        }
+
+        // ── 文字找茬：房主开始游戏 ────────────────────────────────────────────────────
+        "start_game" => {
+            let difficulty = msg.get("difficulty")
+                .and_then(|v| v.as_str())
+                .unwrap_or("easy")
+                .to_string();
+            // 仅允许合法难度值，防止异常输入
+            let difficulty = match difficulty.as_str() {
+                "easy" | "normal" | "hard" | "hell" => difficulty,
+                _ => "easy".to_string(),
+            };
+            match lobby.start_round(session_id, difficulty).await {
+                Ok(()) => {
+                    let name = get_player_name(lobby, session_id).await;
+                    let room_id = {
+                        let sr = lobby.session_rooms.read().await;
+                        sr.get(&session_id).cloned()
+                    };
+                    if let Some(rid) = room_id {
+                        let notice = serde_json::json!({
+                            "type": "room_chat",
+                            "system": true,
+                            "content": format!("{}开始了本轮游戏", name)
+                        }).to_string();
+                        lobby.broadcast_to_room(&rid, &notice).await;
+                    }
+                }
+                Err(e) => send_error(lobby, session_id, &e).await,
+            }
+        }
+
+        // ── 游戏动作（转发给同房间其他成员，并记录当前局战局供新人/重连恢复） ─
         "game_action" => {
             let room_id = {
                 let sr = lobby.session_rooms.read().await;
                 sr.get(&session_id).cloned()
             };
             if let Some(rid) = room_id {
+                // 文字找茬：拦截 level_complete 动作，由服务端处理
+                if msg.get("action").and_then(|v| v.as_str()) == Some("level_complete") {
+                    let level = msg.get("level").and_then(|v| v.as_u64()).unwrap_or(0) as usize;
+                    let elapsed_ms = msg.get("elapsed_ms").and_then(|v| v.as_u64()).unwrap_or(0);
+                    lobby.record_level_complete(session_id, level, elapsed_ms).await;
+                    return;
+                }
+                // 若有 game_state 则写入内存，按房间缓存最新一局
+                if let Some(gs) = msg.get("game_state") {
+                    lobby.record_game_state(&rid, gs.clone()).await;
+                }
                 let mut payload = msg.clone();
                 if let Some(obj) = payload.as_object_mut() {
                     obj.insert("from_session".to_string(), serde_json::json!(session_id));
                 }
-                // 转发给同房间其他成员（不含自己）
+                // 转发给同房间所有其他成员（含参战玩家和观战者）
                 let targets: Vec<usize> = {
                     let rooms = lobby.rooms.read().await;
                     rooms.get(&rid)

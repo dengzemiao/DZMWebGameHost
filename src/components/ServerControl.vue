@@ -1,6 +1,7 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from "vue";
+import { ref, onMounted, onUnmounted, watch, nextTick } from "vue";
 import { invoke } from "@tauri-apps/api/core";
+import QRCode from "qrcode";
 
 const serverRunning = ref(false);
 const onlineCount = ref(0);
@@ -9,6 +10,9 @@ const port = ref(3000);
 const address = ref("");
 const loading = ref(false);
 const errorMsg = ref("");
+
+// 二维码
+const qrCanvas = ref(null);
 
 let pollTimer = null;
 
@@ -63,6 +67,25 @@ async function openDataDir() {
   }
 }
 
+// 生成二维码
+async function generateQR() {
+  if (!address.value || !qrCanvas.value) return;
+  try {
+    await QRCode.toCanvas(qrCanvas.value, address.value, {
+      width: 140,
+      margin: 1,
+      color: { dark: "#1a1a2e", light: "#ffffff" },
+    });
+  } catch (e) {
+    console.error("QR generation failed:", e);
+  }
+}
+
+// 监听地址变化，更新二维码
+watch(address, () => {
+  nextTick(generateQR);
+});
+
 onMounted(() => {
   fetchStatus();
   pollTimer = setInterval(fetchStatus, 2000);
@@ -74,195 +97,334 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="server-control">
-    <h1 class="title">DZMWebGameHost</h1>
-    <p class="subtitle">局域网游戏主机服务</p>
+  <div class="app-container">
+    <!-- 主面板 -->
+    <div class="main-panel">
+      <!-- 头部 -->
+      <header class="header">
+        <div class="logo">
+          <div class="logo-icon">🎮</div>
+          <div class="logo-text">
+            <h1>DZMWebGameHost</h1>
+            <p>局域网游戏主机服务</p>
+          </div>
+        </div>
+      </header>
 
-    <div class="info-card">
-      <div class="info-row">
-        <span class="label">局域网 IP</span>
-        <span class="value">{{ localIp }}</span>
+      <!-- 状态卡片 -->
+      <div class="status-card" :class="{ running: serverRunning }">
+        <div class="status-indicator">
+          <div class="status-dot"></div>
+          <span class="status-text">{{ serverRunning ? "服务运行中" : "服务已停止" }}</span>
+        </div>
+        <div class="online-stats" v-if="serverRunning">
+          <span class="stats-number">{{ onlineCount }}</span>
+          <span class="stats-label">在线</span>
+        </div>
       </div>
-      <div class="info-row">
-        <span class="label">服务端口</span>
-        <input
+
+      <!-- 信息区域 -->
+      <div class="info-section">
+        <div class="info-grid">
+          <div class="info-item">
+            <span class="info-label">局域网 IP</span>
+            <span class="info-value">{{ localIp }}</span>
+          </div>
+          <div class="info-item">
+            <span class="info-label">服务端口</span>
+            <input
+              v-if="!serverRunning"
+              type="number"
+              v-model.number="port"
+              class="port-input"
+              min="1024"
+              max="65535"
+            />
+            <span v-else class="info-value">{{ port }}</span>
+          </div>
+        </div>
+
+        <!-- 二维码区域 -->
+        <div class="qr-section" :class="{ 'qr-placeholder': !serverRunning }">
+          <div class="qr-wrapper">
+            <canvas ref="qrCanvas" v-show="serverRunning && address"></canvas>
+            <div v-show="!serverRunning" class="qr-empty">
+              <span class="qr-empty-icon">📱</span>
+              <span class="qr-empty-text">启动后显示二维码</span>
+            </div>
+          </div>
+          <div class="qr-info">
+            <p class="qr-tip">{{ serverRunning ? '扫码加入游戏' : '扫码加入游戏' }}</p>
+            <p class="qr-address">{{ serverRunning ? address : 'http://...' }}</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 操作按钮 -->
+      <div class="actions">
+        <button
           v-if="!serverRunning"
-          type="number"
-          v-model.number="port"
-          class="port-input"
-          min="1024"
-          max="65535"
-        />
-        <span v-else class="value">{{ port }}</span>
+          class="btn btn-primary"
+          :disabled="loading"
+          @click="startServer"
+        >
+          <span class="btn-icon">▶</span>
+          {{ loading ? "启动中..." : "启动服务" }}
+        </button>
+        <button
+          v-else
+          class="btn btn-danger"
+          :disabled="loading"
+          @click="stopServer"
+        >
+          <span class="btn-icon">■</span>
+          {{ loading ? "停止中..." : "停止服务" }}
+        </button>
+        <button class="btn btn-secondary" @click="openDataDir">
+          <span class="btn-icon">📁</span>
+          数据目录
+        </button>
       </div>
-      <div class="info-row" v-if="serverRunning && address">
-        <span class="label">访问地址</span>
-        <span class="value address">{{ address }}</span>
-      </div>
+
+      <p v-if="errorMsg" class="error-msg">{{ errorMsg }}</p>
     </div>
-
-    <div class="status-card" :class="{ running: serverRunning }">
-      <div class="status-dot"></div>
-      <span class="status-text">
-        {{ serverRunning ? "服务运行中" : "服务已停止" }}
-      </span>
-      <div class="online-count" v-if="serverRunning">
-        <span class="count-number">{{ onlineCount }}</span>
-        <span class="count-label">在线玩家</span>
-      </div>
-    </div>
-
-    <div class="actions">
-      <button
-        v-if="!serverRunning"
-        class="btn btn-start"
-        :disabled="loading"
-        @click="startServer"
-      >
-        {{ loading ? "启动中..." : "启动服务" }}
-      </button>
-      <button
-        v-else
-        class="btn btn-stop"
-        :disabled="loading"
-        @click="stopServer"
-      >
-        {{ loading ? "停止中..." : "停止服务" }}
-      </button>
-
-      <button class="btn btn-folder" @click="openDataDir">
-        打开数据目录
-      </button>
-    </div>
-
-    <p v-if="errorMsg" class="error-msg">{{ errorMsg }}</p>
   </div>
 </template>
 
 <style scoped>
-.server-control {
-  max-width: 480px;
+.app-container {
+  min-height: 100vh;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  color: #e8e8e8;
+  position: relative;
+  overflow: hidden;
+}
+
+.main-panel {
+  max-width: 420px;
   margin: 0 auto;
-  padding: 40px 24px;
+  padding: 32px 24px;
 }
 
-.title {
-  font-size: 24px;
-  font-weight: 700;
-  text-align: center;
-  margin: 0 0 4px 0;
-}
-
-.subtitle {
-  text-align: center;
-  color: #888;
-  font-size: 14px;
-  margin: 0 0 32px 0;
-}
-
-.info-card {
-  background: var(--card-bg, #ffffff);
-  border-radius: 12px;
-  padding: 16px 20px;
-  margin-bottom: 16px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.info-row {
+/* 头部 */
+.header {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 0;
+  margin-bottom: 28px;
 }
 
-.info-row + .info-row {
-  border-top: 1px solid var(--border-color, #f0f0f0);
+.logo {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
-.label {
-  font-size: 14px;
-  color: #666;
+.logo-icon {
+  font-size: 36px;
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.3));
 }
 
-.value {
-  font-size: 14px;
+.logo-text h1 {
+  font-size: 20px;
+  font-weight: 700;
+  margin: 0;
+  background: linear-gradient(135deg, #fff 0%, #a8d8ea 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.logo-text p {
+  font-size: 12px;
+  color: #888;
+  margin: 2px 0 0 0;
+}
+
+/* 状态卡片 */
+.status-card {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  backdrop-filter: blur(10px);
+}
+
+.status-indicator {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #666;
+  transition: all 0.3s;
+}
+
+.status-card.running .status-dot {
+  background: #22c55e;
+  box-shadow: 0 0 12px rgba(34, 197, 94, 0.6);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.status-text {
+  font-size: 15px;
+  font-weight: 500;
+}
+
+.online-stats {
+  text-align: center;
+}
+
+.stats-number {
+  display: block;
+  font-size: 28px;
+  font-weight: 700;
+  color: #22c55e;
+  line-height: 1;
+}
+
+.stats-label {
+  font-size: 12px;
+  color: #888;
+}
+
+/* 信息区域 */
+.info-section {
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 24px;
+  backdrop-filter: blur(10px);
+  min-height: 220px; /* 固定最小高度，刚好容纳二维码区域 */
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+.info-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.info-label {
+  font-size: 12px;
+  color: #888;
+}
+
+.info-value {
+  font-size: 15px;
   font-weight: 600;
-  color: var(--text-color, #333);
-}
-
-.value.address {
-  color: #396cd8;
-  font-family: monospace;
-  font-size: 13px;
-  user-select: all;
+  color: #fff;
+  font-family: "SF Mono", Monaco, monospace;
 }
 
 .port-input {
-  width: 80px;
-  text-align: right;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  padding: 4px 8px;
-  font-size: 14px;
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+  font-size: 15px;
   font-weight: 600;
-  background: transparent;
-  color: inherit;
+  font-family: "SF Mono", Monaco, monospace;
   outline: none;
+  transition: border-color 0.2s;
 }
 
 .port-input:focus {
   border-color: #396cd8;
 }
 
-.status-card {
+/* 二维码区域 */
+.qr-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
-  gap: 10px;
-  background: var(--card-bg, #ffffff);
+  gap: 16px;
+  min-height: 140px; /* 确保二维码区域高度 */
+}
+
+.qr-wrapper {
+  background: #fff;
+  padding: 8px;
   border-radius: 12px;
-  padding: 16px 20px;
-  margin-bottom: 24px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
-.status-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: #ccc;
   flex-shrink: 0;
+  width: 140px;
+  height: 140px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.status-card.running .status-dot {
-  background: #22c55e;
-  box-shadow: 0 0 8px rgba(34, 197, 94, 0.4);
-}
-
-.status-text {
-  font-size: 14px;
-  font-weight: 500;
-  flex: 1;
-}
-
-.online-count {
+.qr-empty {
   display: flex;
   flex-direction: column;
   align-items: center;
-}
-
-.count-number {
-  font-size: 24px;
-  font-weight: 700;
-  color: #396cd8;
-  line-height: 1;
-}
-
-.count-label {
-  font-size: 11px;
+  justify-content: center;
+  width: 124px;
+  height: 124px;
   color: #888;
-  margin-top: 2px;
+  gap: 8px;
 }
 
+.qr-empty-icon {
+  font-size: 32px;
+  opacity: 0.5;
+}
+
+.qr-empty-text {
+  font-size: 11px;
+  opacity: 0.6;
+}
+
+.qr-wrapper canvas {
+  display: block;
+  border-radius: 4px;
+}
+
+.qr-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.qr-tip {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  margin: 0 0 6px 0;
+}
+
+.qr-address {
+  font-size: 12px;
+  color: #a8d8ea;
+  font-family: "SF Mono", Monaco, monospace;
+  margin: 0;
+  word-break: break-all;
+  user-select: all;
+}
+
+/* 操作按钮 */
 .actions {
   display: flex;
   gap: 12px;
@@ -270,9 +432,13 @@ onUnmounted(() => {
 
 .btn {
   flex: 1;
-  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 14px 16px;
   border: none;
-  border-radius: 10px;
+  border-radius: 12px;
   font-size: 14px;
   font-weight: 600;
   cursor: pointer;
@@ -280,36 +446,42 @@ onUnmounted(() => {
 }
 
 .btn:disabled {
-  opacity: 0.6;
+  opacity: 0.5;
   cursor: not-allowed;
 }
 
-.btn-start {
-  background: #396cd8;
+.btn-icon {
+  font-size: 12px;
+}
+
+.btn-primary {
+  background: linear-gradient(135deg, #396cd8 0%, #2d5bc0 100%);
   color: #fff;
 }
 
-.btn-start:hover:not(:disabled) {
-  background: #2d5bc0;
+.btn-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(57, 108, 216, 0.4);
 }
 
-.btn-stop {
-  background: #ef4444;
+.btn-danger {
+  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
   color: #fff;
 }
 
-.btn-stop:hover:not(:disabled) {
-  background: #dc2626;
+.btn-danger:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 20px rgba(239, 68, 68, 0.4);
 }
 
-.btn-folder {
-  background: var(--card-bg, #ffffff);
-  color: var(--text-color, #333);
-  border: 1px solid #ddd;
+.btn-secondary {
+  background: rgba(255, 255, 255, 0.1);
+  color: #e8e8e8;
+  border: 1px solid rgba(255, 255, 255, 0.2);
 }
 
-.btn-folder:hover {
-  background: var(--hover-bg, #f5f5f5);
+.btn-secondary:hover {
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .error-msg {
@@ -317,26 +489,5 @@ onUnmounted(() => {
   font-size: 13px;
   text-align: center;
   margin-top: 16px;
-}
-
-@media (prefers-color-scheme: dark) {
-  .server-control {
-    --card-bg: #1a1a1a;
-    --border-color: #333;
-    --text-color: #e5e5e5;
-    --hover-bg: #2a2a2a;
-  }
-
-  .label {
-    color: #aaa;
-  }
-
-  .port-input {
-    border-color: #444;
-  }
-
-  .btn-folder {
-    border-color: #444;
-  }
 }
 </style>

@@ -1,0 +1,544 @@
+/* ── 文字找茬游戏样式 ────────────────────────────────────────────────────── */
+
+/* 整体容器：撑满父级 */
+.wsb-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-primary, #0d1117);
+  color: var(--text-pri, #e6edf3);
+  font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  user-select: none;
+}
+
+/* ── 顶部状态条 ──────────────────────────────────────────────────────────── */
+.wsb-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--bg-secondary, #161b22);
+  border-bottom: 1px solid var(--border, #30363d);
+  flex-shrink: 0;
+}
+
+.wsb-countdown {
+  font-size: 28px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #58a6ff;
+  min-width: 64px;
+  text-align: center;
+}
+
+.wsb-countdown.urgent {
+  color: #f85149;
+  animation: wsb-pulse 0.6s infinite alternate;
+}
+
+@keyframes wsb-pulse {
+  from { opacity: 1; }
+  to   { opacity: 0.4; }
+}
+
+.wsb-level-info {
+  font-size: 14px;
+  color: var(--text-sec, #8b949e);
+  font-weight: 500;
+}
+
+/* ── 游戏区域（flex 1，居中显示内容） ───────────────────────────────────── */
+.wsb-game-area {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── 等待中视图 ──────────────────────────────────────────────────────────── */
+.wsb-waiting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.wsb-waiting-icon {
+  font-size: 56px;
+  line-height: 1;
+}
+
+.wsb-waiting-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: var(--text-pri, #e6edf3);
+}
+
+.wsb-waiting-desc {
+  font-size: 14px;
+  color: var(--text-sec, #8b949e);
+  margin-bottom: 8px;
+}
+
+.wsb-start-btn {
+  padding: 12px 36px;
+  font-size: 16px;
+  font-weight: 600;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  background: linear-gradient(135deg, #238636, #2ea043);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(46, 160, 67, 0.4);
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+.wsb-start-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.wsb-start-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.wsb-start-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* ── 找茬游戏区域 ────────────────────────────────────────────────────────── */
+.wsb-puzzle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 16px;
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+}
+
+.wsb-puzzle-title {
+  font-size: 15px;
+  color: var(--text-sec, #8b949e);
+  font-weight: 500;
+  flex-shrink: 0;
+}
+
+/* 网格：行列数由 CSS 变量控制 */
+.wsb-grid {
+  display: grid;
+  grid-template-columns: repeat(var(--wsb-cols, 6), var(--wsb-cell-size, 48px));
+  grid-template-rows:    repeat(var(--wsb-cols, 6), var(--wsb-cell-size, 48px));
+  gap: 3px;
+  flex-shrink: 0;
+}
+
+.wsb-grid-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--wsb-cell-size, 48px);
+  height: var(--wsb-cell-size, 48px);
+  font-size: calc(var(--wsb-cell-size, 48px) * 0.46);
+  font-weight: 500;
+  border: 1.5px solid var(--border, #30363d);
+  border-radius: 6px;
+  background: var(--bg-secondary, #161b22);
+  cursor: pointer;
+  transition: background 0.1s, transform 0.1s, border-color 0.1s;
+}
+
+.wsb-grid-cell:hover {
+  background: #21262d;
+  border-color: #58a6ff;
+  transform: scale(1.06);
+}
+
+.wsb-grid-cell:active {
+  transform: scale(0.96);
+}
+
+/* 答对 — 绿色闪烁 */
+.wsb-grid-cell.correct {
+  background: rgba(46, 160, 67, 0.35);
+  border-color: #2ea043;
+  color: #56d364;
+  animation: wsb-correct 0.4s ease;
+}
+
+@keyframes wsb-correct {
+  0%   { transform: scale(1.0); }
+  40%  { transform: scale(1.18); }
+  100% { transform: scale(1.0); }
+}
+
+/* 答错 — 红色抖动 */
+.wsb-grid-cell.wrong {
+  background: rgba(248, 81, 73, 0.25);
+  border-color: #f85149;
+  color: #ff7b72;
+  animation: wsb-wrong 0.6s ease;
+}
+
+@keyframes wsb-wrong {
+  0%   { transform: translateX(0); }
+  20%  { transform: translateX(-6px); }
+  40%  { transform: translateX(6px); }
+  60%  { transform: translateX(-4px); }
+  80%  { transform: translateX(4px); }
+  100% { transform: translateX(0); }
+}
+
+/* ── 排行榜视图 ──────────────────────────────────────────────────────────── */
+.wsb-leaderboard {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  max-width: 560px;
+  padding: 16px 16px 12px;
+  box-sizing: border-box;
+  gap: 10px;
+}
+
+.wsb-lb-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border, #30363d);
+}
+
+.wsb-lb-header-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.wsb-lb-header-sub {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wsb-lb-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-pri, #e6edf3);
+  letter-spacing: 0.3px;
+}
+
+.wsb-lb-reason {
+  font-size: 13px;
+  color: #f0883e;
+  font-weight: 600;
+  background: rgba(240, 136, 62, 0.12);
+  padding: 2px 8px;
+  border-radius: 20px;
+}
+
+.wsb-lb-diff-badge {
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.wsb-lb-levels-hint {
+  font-size: 12px;
+  color: var(--text-sec, #8b949e);
+}
+
+/* 列表容器：自定义滚动条 */
+.wsb-lb-list {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  scrollbar-width: thin;
+  scrollbar-color: #30363d transparent;
+}
+.wsb-lb-list::-webkit-scrollbar { width: 4px; }
+.wsb-lb-list::-webkit-scrollbar-thumb { background: #30363d; border-radius: 2px; }
+
+/* 每行 */
+.wsb-lb-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 12px;
+  border-bottom: 1px solid rgba(48, 54, 61, 0.6);
+  transition: background 0.15s;
+}
+.wsb-lb-item:last-child { border-bottom: none; }
+.wsb-lb-item:hover { background: rgba(255,255,255,0.03); }
+
+.wsb-lb-item.me {
+  background: rgba(88, 166, 255, 0.08);
+  border-left: 3px solid #58a6ff;
+  padding-left: 9px;
+}
+.wsb-lb-item.finished { background: rgba(46, 160, 67, 0.06); }
+.wsb-lb-item.dropped  { opacity: 0.45; }
+
+/* 名次区 */
+.wsb-lb-rank-wrap {
+  width: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.wsb-lb-medal {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.wsb-lb-rank-num {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--bg-primary, #0d1117);
+  border: 1px solid var(--border, #30363d);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 12px;
+  color: var(--text-sec, #8b949e);
+}
+
+/* 内容主体 */
+.wsb-lb-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.wsb-lb-top-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wsb-lb-name {
+  flex: 1;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-pri, #e6edf3);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wsb-lb-me-tag {
+  font-size: 11px;
+  color: #58a6ff;
+  font-weight: 500;
+  margin-left: 2px;
+}
+
+/* 状态徽章 */
+.wsb-lb-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 7px;
+  border-radius: 20px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+.wsb-lb-badge.finish   { background: rgba(46, 160, 67, 0.2);   color: #3fb950; }
+.wsb-lb-badge.progress { background: rgba(88, 166, 255, 0.15); color: #79c0ff; }
+.wsb-lb-badge.drop     { background: rgba(248, 81, 73, 0.15);  color: #ff7b72; }
+
+.wsb-lb-time {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-sec, #8b949e);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* 进度条行 */
+.wsb-lb-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.wsb-lb-bar-track {
+  flex: 1;
+  height: 5px;
+  border-radius: 3px;
+  background: rgba(48, 54, 61, 0.8);
+  overflow: hidden;
+}
+
+.wsb-lb-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #388bfd, #79c0ff);
+  transition: width 0.4s ease;
+}
+.wsb-lb-bar-fill.full {
+  background: linear-gradient(90deg, #2ea043, #3fb950);
+}
+
+.wsb-lb-bar-text {
+  font-size: 11px;
+  color: var(--text-sec, #8b949e);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  min-width: 30px;
+  text-align: right;
+}
+
+/* ── 再来一局按钮 ────────────────────────────────────────────────────────── */
+.wsb-replay-wrap {
+  display: flex;
+  justify-content: center;
+  padding-top: 12px;
+  flex-shrink: 0;
+}
+
+.wsb-replay-btn {
+  padding: 11px 40px;
+  font-size: 15px;
+  font-weight: 600;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  background: linear-gradient(135deg, #1f6feb, #388bfd);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(56, 139, 253, 0.35);
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+.wsb-replay-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.wsb-replay-btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.wsb-replay-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: #30363d;
+  color: #8b949e;
+  box-shadow: none;
+}
+
+/* ── word_spot 创建房间滑块样式 ────────────────────────────────────────── */
+.ws-range-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+
+.ws-range-row input[type="range"] {
+  flex: 1;
+  accent-color: #58a6ff;
+  cursor: pointer;
+}
+
+.ws-range-row span {
+  min-width: 44px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #58a6ff;
+  text-align: right;
+}
+
+/* ── 难度选择器（等待视图·房主专属）──────────────────────────────────── */
+.wsb-diff-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 340px;
+}
+
+.wsb-diff-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.wsb-diff-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 10px 14px;
+  min-width: 66px;
+  border: 1.5px solid var(--border, #30363d);
+  border-radius: 10px;
+  background: var(--bg-secondary, #161b22);
+  color: var(--text-sec, #8b949e);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, color 0.2s, transform 0.1s;
+  font-family: inherit;
+}
+
+.wsb-diff-btn:hover {
+  border-color: #58a6ff;
+  color: var(--text-pri, #e6edf3);
+  transform: translateY(-1px);
+}
+
+.wsb-diff-btn.active {
+  border-color: #58a6ff;
+  background: rgba(88, 166, 255, 0.12);
+  color: #e6edf3;
+}
+
+/* 地狱难度 active 用红色 */
+.wsb-diff-btn[data-diff="hell"].active {
+  border-color: #f85149;
+  background: rgba(248, 81, 73, 0.12);
+}
+
+/* 困难难度 active 用橙色 */
+.wsb-diff-btn[data-diff="hard"].active {
+  border-color: #f0883e;
+  background: rgba(240, 136, 62, 0.12);
+}
+
+/* 简单难度 active 用绿色 */
+.wsb-diff-btn[data-diff="easy"].active {
+  border-color: #3fb950;
+  background: rgba(63, 185, 80, 0.12);
+}
+
+.wsb-diff-label-text {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1;
+}
+
+.wsb-diff-size-text {
+  font-size: 11px;
+  opacity: 0.7;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}

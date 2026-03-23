@@ -40,6 +40,9 @@
     onlineCount.textContent = data.online_count;
     updatePlayerDisplay(data.name);
     appendSystemMsg(`欢迎回来，${data.name}！`);
+    
+    // 回到大厅时，确保离开之前的房间（处理浏览器前进/后退导航的情况）
+    ws.send({ type: 'leave_room' });
   });
 
   ws.on('player_count', (count) => {
@@ -204,6 +207,14 @@
     setRadioActive('roomTypeGroup', 'pvp');
     setRadioActive('aiDifficultyGroup', 'normal');
     $('aiDifficultyRow').style.display = 'none';
+    // 重置 word_spot 配置
+    $('wsMaxPlayers').value = 8;  $('wsMaxPlayersVal').textContent = '8 人';
+    $('wsTotalLevels').value = 10; $('wsTotalLevelsVal').textContent = '10 关';
+    $('wsTimePer').value = 30;    $('wsTimePerVal').textContent = '30 秒';
+    const isWordSpot = selectedGame === 'word_spot';
+    ['wordSpotRow', 'wordSpotLevelRow', 'wordSpotTimeRow'].forEach(id => {
+      $(id).style.display = isWordSpot ? '' : 'none';
+    });
   }
 
   $('btnRandomName').addEventListener('click', () => {
@@ -233,6 +244,11 @@
         const game = window.getGame(selectedGame);
         const pvaiItem = document.querySelector('#roomTypeGroup [data-value="pv_ai"]');
         if (pvaiItem) pvaiItem.style.display = game && game.supportsAI ? '' : 'none';
+        // word_spot 专属配置行显隐
+        const isWordSpot = selectedGame === 'word_spot';
+        ['wordSpotRow', 'wordSpotLevelRow', 'wordSpotTimeRow'].forEach(id => {
+          $(id).style.display = isWordSpot ? '' : 'none';
+        });
       });
     });
   }
@@ -266,20 +282,38 @@
 
   // 确认创建：将配置存入 sessionStorage，跳转到 room.html?action=create
   // room.html 连接 WS 后再发 create_room，避免跳转时 WS 断开销毁房间
+  // word_spot 滑块实时更新显示
+  $('wsMaxPlayers').addEventListener('input', () => {
+    $('wsMaxPlayersVal').textContent = $('wsMaxPlayers').value + ' 人';
+  });
+  $('wsTotalLevels').addEventListener('input', () => {
+    $('wsTotalLevelsVal').textContent = $('wsTotalLevels').value + ' 关';
+  });
+  $('wsTimePer').addEventListener('input', () => {
+    $('wsTimePerVal').textContent = $('wsTimePer').value + ' 秒';
+  });
+
   $('btnConfirmCreate').addEventListener('click', () => {
     const name = $('roomNameInput').value.trim() || generateRoomName();
-    const roomType = getRadioValue('roomTypeGroup') || 'pvp';
+    const isWordSpot = selectedGame === 'word_spot';
+    const roomType = isWordSpot ? 'pvp' : (getRadioValue('roomTypeGroup') || 'pvp');
     const aiDifficulty = roomType === 'pv_ai' ? (getRadioValue('aiDifficultyGroup') || 'normal') : null;
     const allowSpectate = $('allowSpectate').checked;
     const game = window.getGame(selectedGame) || window.getAllGames()[0];
 
+    const game_config = isWordSpot ? {
+      total_levels: parseInt($('wsTotalLevels').value, 10),
+      time_per_level_secs: parseInt($('wsTimePer').value, 10),
+    } : null;
+
     const config = {
       name,
       game: selectedGame,
-      max_players: roomType === 'pv_ai' ? 1 : game.maxPlayers,
+      max_players: isWordSpot ? parseInt($('wsMaxPlayers').value, 10) : (roomType === 'pv_ai' ? 1 : game.maxPlayers),
       room_type: roomType,
       ai_difficulty: aiDifficulty,
       allow_spectate: allowSpectate,
+      game_config,
     };
 
     sessionStorage.setItem('pendingCreateRoom', JSON.stringify(config));
@@ -380,5 +414,21 @@
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 3000);
   }
+
+  // ── 页面导航处理（浏览器前进/后退） ─────────────────────────────────────
+  
+  // pageshow：页面显示时触发（包括从 bfcache 恢复）
+  window.addEventListener('pageshow', (event) => {
+    if (event.persisted) {
+      // 从 bfcache 恢复（比如从房间页面点击后退回到大厅，或从外部网页点击前进回到大厅）
+      // 确保离开之前可能存在的房间
+      if (ws && ws.ws && ws.ws.readyState === WebSocket.OPEN) {
+        ws.send({ type: 'leave_room' });
+      } else {
+        // WebSocket 已断开，触发重连（重连成功后会触发 welcome，其中已有 leave_room 调用）
+        ws.connect();
+      }
+    }
+  });
 
 })();

@@ -1,0 +1,383 @@
+/* ══════════════════════════════════════════════════════════════════════════════
+   五子棋棋盘样式
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── 自定义属性 ────────────────────────────────────────────────────────────── */
+:root {
+  --gm-board-bg: linear-gradient(135deg, #dcb87a 0%, #c9a660 25%, #be9650 50%, #b08840 75%, #a07832 100%);
+  --gm-board-border: #6b4515;
+  --gm-black-stone-bg: radial-gradient(ellipse 65% 55% at 35% 28%, #888 0%, #444 30%, #1a1a1a 60%, #080808 100%);
+  --gm-white-stone-bg: radial-gradient(ellipse 65% 55% at 35% 28%, #fff 0%, #e8e8e8 30%, #cccccc 60%, #aaaaaa 100%);
+
+  /* 棋子尺寸变量（由 JS 动态设置，这里是默认值） */
+  --gm-piece-size: 32px;
+  --gm-hint-size:  10px;
+}
+
+/* ── 外层容器 ──────────────────────────────────────────────────────────────── */
+.gm-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: clamp(8px, 2vw, 16px);
+  gap: clamp(8px, 2vw, 14px);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  background: radial-gradient(ellipse at center, rgba(30, 20, 10, 0.25) 0%, transparent 70%);
+  overflow: visible;
+}
+
+/* ── 棋盘外框 ──────────────────────────────────────────────────────────────── */
+.gm-board-outer {
+  position: relative;
+  background: var(--gm-board-bg);
+  border: clamp(3px, 0.8vw, 5px) solid var(--gm-board-border);
+  border-radius: clamp(4px, 1vw, 8px);
+  box-shadow:
+    0 clamp(10px, 3vw, 20px) clamp(30px, 8vw, 60px) rgba(0, 0, 0, 0.55),
+    0 clamp(4px, 1vw, 8px)   clamp(10px, 2vw, 20px) rgba(0, 0, 0, 0.35),
+    inset 0 2px 4px rgba(255, 255, 255, 0.18),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+  max-width: 100%;
+  touch-action: manipulation;
+}
+
+/* 木纹纹理叠加 */
+.gm-board-outer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+  mix-blend-mode: overlay;
+}
+
+/* 光泽条纹 */
+.gm-board-outer::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%; right: -100%; bottom: 0;
+  background: linear-gradient(
+    108deg,
+    transparent 40%,
+    rgba(255,255,255,0.03) 45%,
+    rgba(255,255,255,0.06) 50%,
+    rgba(255,255,255,0.03) 55%,
+    transparent 60%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.gm-board-inner {
+  position: relative;
+  padding: var(--gm-board-padding, clamp(14px, 3.5vw, 24px));
+  z-index: 2;
+}
+
+/* ── 棋盘格线区 ────────────────────────────────────────────────────────────── */
+.gm-grid {
+  position: relative;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.08));
+}
+
+.gm-grid canvas {
+  display: block;
+  cursor: pointer;
+}
+
+/* ── 棋子容器（绝对定位覆盖在 canvas 上方，不响应事件） ─────────────────────── */
+.gm-pieces {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+/* ── 特效容器 ──────────────────────────────────────────────────────────────── */
+.gm-effects-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 100;
+  overflow: visible;
+}
+
+/* ── 棋子（落在交叉点，transform 居中） ────────────────────────────────────── */
+.gm-stone {
+  position: absolute;
+  width:  var(--gm-piece-size, 32px);
+  height: var(--gm-piece-size, 32px);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 10;
+  transition: transform 0.12s cubic-bezier(0.34, 1.56, 0.64, 1);
+  will-change: transform, box-shadow;
+}
+
+/* 棋子高光伪元素（百分比定位，随棋子大小缩放） */
+.gm-stone::after {
+  content: '';
+  position: absolute;
+  top: 10%;
+  left: 16%;
+  width: 55%;
+  height: 28%;
+  border-radius: 50%;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  pointer-events: none;
+}
+
+/* ── 黑方棋子 ──────────────────────────────────────────────────────────────── */
+.gm-stone.black {
+  background: var(--gm-black-stone-bg);
+  border: 1.5px solid rgba(0, 0, 0, 0.9);
+  box-shadow:
+    0 5px 14px rgba(0, 0, 0, 0.55),
+    0 2px 5px  rgba(0, 0, 0, 0.4),
+    inset 0 2px 3px rgba(255, 255, 255, 0.15),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* ── 白方棋子 ──────────────────────────────────────────────────────────────── */
+.gm-stone.white {
+  background: var(--gm-white-stone-bg);
+  border: 1.5px solid rgba(160, 160, 160, 0.7);
+  box-shadow:
+    0 5px 14px rgba(0, 0, 0, 0.4),
+    0 2px 5px  rgba(0, 0, 0, 0.25),
+    inset 0 2px 3px rgba(255, 255, 255, 0.7),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.12);
+}
+
+/* ── 最后一手标记（中心红点） ──────────────────────────────────────────────── */
+.gm-stone.last-move::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 28%;
+  height: 28%;
+  border-radius: 50%;
+  background: rgba(220, 50, 50, 0.92);
+  box-shadow: 0 0 6px rgba(220, 50, 50, 0.7);
+  z-index: 2;
+}
+
+/* ── 获胜五连高亮 ──────────────────────────────────────────────────────────── */
+.gm-stone.win-stone {
+  animation: gm-win-pulse 0.6s ease-in-out infinite alternate;
+  z-index: 20;
+}
+
+.gm-stone.win-stone.black {
+  box-shadow:
+    0 0 0 3px rgba(255, 200, 0, 0.9),
+    0 0 20px 6px rgba(255, 180, 0, 0.6),
+    0 0 40px 12px rgba(255, 150, 0, 0.3),
+    0 5px 14px rgba(0, 0, 0, 0.5) !important;
+}
+
+.gm-stone.win-stone.white {
+  box-shadow:
+    0 0 0 3px rgba(255, 200, 0, 0.9),
+    0 0 20px 6px rgba(255, 180, 0, 0.6),
+    0 0 40px 12px rgba(255, 150, 0, 0.3),
+    0 5px 14px rgba(0, 0, 0, 0.3) !important;
+}
+
+@keyframes gm-win-pulse {
+  0%   { transform: translate(-50%, -50%) scale(1);    filter: brightness(1); }
+  100% { transform: translate(-50%, -50%) scale(1.18); filter: brightness(1.2); }
+}
+
+/* ── 落子波纹特效 ──────────────────────────────────────────────────────────── */
+.gm-ripple {
+  position: absolute;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0.4);
+  opacity: 1;
+  pointer-events: none;
+  z-index: 5;
+  animation: gm-ripple-expand 0.6s ease-out forwards;
+}
+
+.gm-ripple.black {
+  border: 2.5px solid rgba(80, 80, 80, 0.85);
+}
+
+.gm-ripple.white {
+  border: 2.5px solid rgba(200, 200, 200, 0.85);
+}
+
+@keyframes gm-ripple-expand {
+  0%   { transform: translate(-50%, -50%) scale(0.4); opacity: 1; border-width: 3px; }
+  100% { transform: translate(-50%, -50%) scale(2.2); opacity: 0; border-width: 1px; }
+}
+
+/* ── 状态栏 ────────────────────────────────────────────────────────────────── */
+.gm-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: clamp(240px, 80vw, 480px);
+  padding: clamp(6px, 1.5vw, 10px) clamp(10px, 2.5vw, 20px);
+  background: linear-gradient(180deg, rgba(30, 22, 12, 0.88) 0%, rgba(18, 12, 6, 0.92) 100%);
+  border: 1px solid rgba(220, 180, 80, 0.2);
+  border-radius: clamp(8px, 2vw, 12px);
+  font-size: clamp(11px, 2vw, 13px);
+  color: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  gap: clamp(6px, 1.5vw, 12px);
+  flex-wrap: wrap;
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.gm-turn-indicator {
+  display: flex;
+  align-items: center;
+  gap: clamp(6px, 1.5vw, 10px);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+/* 回合颜色示意棋子 */
+.gm-turn-stone {
+  width:  clamp(14px, 2.5vw, 18px);
+  height: clamp(14px, 2.5vw, 18px);
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: all 0.35s ease;
+}
+
+.gm-turn-stone.black {
+  background: radial-gradient(ellipse 65% 55% at 35% 30%, #888 0%, #444 35%, #111 100%);
+  border: 1.5px solid rgba(0, 0, 0, 0.8);
+  box-shadow:
+    0 0 10px rgba(100, 100, 100, 0.6),
+    0 0 20px rgba(80, 80, 80, 0.3),
+    inset 0 1px 2px rgba(255, 255, 255, 0.2);
+  animation: gm-turn-pulse 1.5s ease-in-out infinite;
+}
+
+.gm-turn-stone.white {
+  background: radial-gradient(ellipse 65% 55% at 35% 30%, #fff 0%, #ddd 35%, #aaa 100%);
+  border: 1.5px solid rgba(150, 150, 150, 0.6);
+  box-shadow:
+    0 0 10px rgba(220, 220, 220, 0.7),
+    0 0 20px rgba(180, 180, 180, 0.3),
+    inset 0 1px 2px rgba(255, 255, 255, 0.8);
+  animation: gm-turn-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes gm-turn-pulse {
+  0%, 100% { transform: scale(1);    opacity: 1; }
+  50%       { transform: scale(1.14); opacity: 0.85; }
+}
+
+.gm-move-count {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+/* ── AI 思考提示 ────────────────────────────────────────────────────────────── */
+.gm-ai-thinking {
+  display: none;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #ffc000;
+  font-weight: 700;
+  flex-shrink: 0;
+  text-shadow: 0 0 8px rgba(255, 192, 0, 0.4);
+}
+
+.gm-ai-thinking.active {
+  display: flex;
+  animation: gm-ai-fade 1s ease-in-out infinite alternate;
+}
+
+@keyframes gm-ai-fade {
+  0%   { opacity: 0.65; }
+  100% { opacity: 1; }
+}
+
+.gm-ai-spinner {
+  width: 15px;
+  height: 15px;
+  border: 2.5px solid rgba(255, 192, 0, 0.2);
+  border-top-color: #ffc000;
+  border-radius: 50%;
+  animation: gm-spin 0.65s linear infinite;
+}
+
+@keyframes gm-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── 通知动画 ──────────────────────────────────────────────────────────────── */
+@keyframes gm-notice-appear {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.8); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* ── 响应式优化 ────────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .gm-status-bar {
+    padding: 8px 14px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 900px) {
+  .gm-wrapper {
+    padding: 8px;
+    gap: 8px;
+  }
+  .gm-board-outer {
+    border-width: 3px;
+  }
+}
+
+@media (max-width: 375px) {
+  .gm-status-bar {
+    padding: 4px 8px;
+    font-size: 10px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .gm-turn-indicator {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+/* 触屏设备优化 */
+@media (hover: none) and (pointer: coarse) {
+  .gm-grid canvas {
+    cursor: default;
+  }
+}

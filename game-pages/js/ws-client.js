@@ -86,6 +86,24 @@ class GameWSClient {
   // ── 消息分发 ───────────────────────────────────────────────────────────────
 
   _handleMessage(data) {
+    // 处理定向消息（含 _targets 和 _payload 字段）
+    if (data._targets && data._payload) {
+      // 检查当前 session_id 是否在目标列表中
+      const isTarget = this.sessionId && data._targets.includes(this.sessionId);
+      if (!isTarget) {
+        // 不是目标受众，忽略此消息
+        return;
+      }
+      // 解析真实 payload
+      try {
+        const payload = JSON.parse(data._payload);
+        data = payload;
+      } catch (e) {
+        console.error('[WS] Failed to parse directed message payload:', e);
+        return;
+      }
+    }
+    
     switch (data.type) {
       case 'welcome':
         this.sessionId = data.session_id;
@@ -136,7 +154,8 @@ class GameWSClient {
 
       // ── 游戏相关 ────────────────────────────────────────────────────────────
       case 'game_start':
-        this._emit('game_start', data);
+      case 'game_started':  // word_spot: 开局广播（含 seed/config/remaining_ms）
+        this._emit('game_started', data);
         break;
 
       case 'game_action':
@@ -145,6 +164,18 @@ class GameWSClient {
 
       case 'game_over':
         this._emit('game_over', data);
+        break;
+
+      case 'game_restart':
+        this._emit('game_restart', data);
+        break;
+
+      case 'leaderboard_update':  // word_spot: 实时排行榜广播
+        this._emit('leaderboard_update', data);
+        break;
+
+      case 'round_ended':  // word_spot: 倒计时到或全员完成
+        this._emit('round_ended', data);
         break;
 
       case 'room_chat':

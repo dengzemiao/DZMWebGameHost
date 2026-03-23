@@ -41,8 +41,17 @@ class ChessGameAdapter {
     // DOM 引用
     this.canvas       = null;
     this.piecesLayer  = null;
-    this.CELL         = 54;     // 格子像素大小
-    this.PADDING      = 28;     // 棋盘内边距
+    this.effectsLayer = null;   // 特效层
+    
+    // 棋盘尺寸（动态计算）
+    this.CELL         = 54;     // 格子像素大小（默认值，会动态计算）
+    this.PADDING      = 28;     // 棋盘内边距（默认值，会动态计算）
+    this.MIN_CELL     = 32;     // 最小格子尺寸
+    this.MAX_CELL     = 60;     // 最大格子尺寸
+    
+    // 动画相关
+    this.isAnimating  = false;  // 是否正在播放动画
+    this._resizeHandler = null; // resize 事件处理器
   }
 
   // ── 初始化 ────────────────────────────────────────────────────────────────
@@ -50,13 +59,153 @@ class ChessGameAdapter {
     this.board = this._createInitialBoard();
     this._buildDOM();
     this._render();
+    
+    // 监听窗口大小变化（横竖屏切换）
+    this._resizeHandler = this._debounce(() => this._handleResize(), 150);
+    window.addEventListener('resize', this._resizeHandler);
+    
+    console.log('[Chess] init → role:', this.role, 'roomType:', this.roomType,
+      'isSpectator:', this.isSpectator, 'currentTurn:', this.currentTurn);
+  }
+  
+  // 防抖函数
+  _debounce(fn, delay) {
+    let timer = null;
+    return (...args) => {
+      clearTimeout(timer);
+      timer = setTimeout(() => fn.apply(this, args), delay);
+    };
+  }
+  
+  // 倒计时重新计算并重绘棋盘
+  _handleResize() {
+    if (!this.container) return;
+    this._calcBoardSize();
+    this._rebuildBoard();
+  }
+  
+  // 动态计算棋盘尺寸（根据容器窄边自适应）
+  _calcBoardSize() {
+    // 棋盘格子数（线间距）：9列×10行
+    const COLS = 8, ROWS = 9;
+    // 实际渲染宽/高 = CELL*(COLS+2) / CELL*(ROWS+2)
+    // 原因：canvas 内部 PADDING（CELL*0.5）+ CSS board-inner padding（CELL*0.5）= 每侧 CELL，共 2*CELL
+    const RATIO = (COLS + 2) / (ROWS + 2); // 10/11 ≈ 0.909
+    
+    // 获取容器可用空间
+    const containerRect = this.container.getBoundingClientRect();
+    // 预留状态栏和边距的空间
+    const statusBarHeight = 50;
+    const margin = 20;
+    let availW = containerRect.width - margin * 2;
+    let availH = containerRect.height - statusBarHeight - margin * 2;
+    
+    // 容器尺寸无效时，使用视口窄边计算
+    if (availW <= 0 || availH <= 0) {
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      availW = vw - margin * 2;
+      availH = vh - statusBarHeight - margin * 2;
+    }
+    
+    // 取窄边计算（横竖屏自动适配）
+    let boardW, boardH;
+    if (availW / availH > RATIO) {
+      // 容器较宽，按高度填满
+      boardH = availH;
+      boardW = boardH * RATIO;
+    } else {
+      // 容器较窄，按宽度填满
+      boardW = availW;
+      boardH = boardW / RATIO;
+    }
+    
+    // 计算格子大小：除以 (COLS+2)/(ROWS+2) 以完整容纳双重 padding
+    const cellFromW = boardW / (COLS + 2); // boardW/10
+    const cellFromH = boardH / (ROWS + 2); // boardH/11
+    let cell = Math.min(cellFromW, cellFromH);
+    
+    // 动态下限：保证棋盘始终完整显示在容器内（不强制最小值超出可用空间）
+    const dynamicMin = Math.max(8, Math.min(this.MIN_CELL, cell));
+    cell = Math.max(dynamicMin, Math.min(this.MAX_CELL, cell));
+    
+    this.CELL = Math.floor(cell);
+    this.PADDING = Math.floor(cell * 0.5);
+    
+    // 同步更新 CSS 变量（让 CSS 样式与 JS 尺寸一致）
+    const pieceSize = Math.floor(cell * 0.9);      // 棋子稍小于格子
+    const pieceFont = Math.floor(cell * 0.42);     // 字体约为格子的 42%
+    const hintSize = Math.floor(cell * 0.35);      // 提示点约为格子的 35%
+    
+    document.documentElement.style.setProperty('--piece-size', `${pieceSize}px`);
+    document.documentElement.style.setProperty('--piece-font', `${pieceFont}px`);
+    document.documentElement.style.setProperty('--hint-size', `${hintSize}px`);
+    document.documentElement.style.setProperty('--board-padding', `${this.PADDING}px`);
+    
+    // 同时设置到容器上（确保优先级）
+    if (this.container) {
+      this.container.style.setProperty('--piece-size', `${pieceSize}px`);
+      this.container.style.setProperty('--piece-font', `${pieceFont}px`);
+      this.container.style.setProperty('--hint-size', `${hintSize}px`);
+      this.container.style.setProperty('--board-padding', `${this.PADDING}px`);
+    }
+    
+    console.log('[Chess] _calcBoardSize → cell:', cell, 'pieceSize:', pieceSize, 'availW:', availW, 'availH:', availH);
+  }
+  
+  // 重建棋盘 DOM 和渲染
+  _rebuildBoard() {
+    const COLS = 8, ROWS = 9;
+    const W = this.CELL * COLS;
+    const H = this.CELL * ROWS;
+    const totalW = W + this.PADDING * 2;
+    const totalH = H + this.PADDING * 2;
+    
+    // 更新尺寸
+    const grid = this.container.querySelector('#chGrid');
+    const canvas = this.container.querySelector('#chCanvas');
+    const pieces = this.container.querySelector('#chPieces');
+    const effects = this.container.querySelector('#chEffects');
+    
+    if (grid) {
+      grid.style.width = `${totalW}px`;
+      grid.style.height = `${totalH}px`;
+    }
+    if (canvas) {
+      canvas.width = totalW;
+      canvas.height = totalH;
+    }
+    if (pieces) {
+      pieces.style.width = `${totalW}px`;
+      pieces.style.height = `${totalH}px`;
+    }
+    if (effects) {
+      effects.style.width = `${totalW}px`;
+      effects.style.height = `${totalH}px`;
+    }
+    
+    // 重绘棋盘和棋子
+    this._drawBoard();
+    this._render();
   }
 
   onGameStart(roomData) {
     this.gameStarted = true;
     this._render();
-    if (this.roomType === 'pv_ai' && this.role === 'black') {
-      // 黑方是 AI 且红方先走，不需要 AI 立即行动
+    console.log('[Chess] onGameStart → gameStarted:', this.gameStarted,
+      'role:', this.role, 'roomType:', this.roomType,
+      'isSpectator:', this.isSpectator, 'currentTurn:', this.currentTurn);
+    
+    // 观战模式不触发任何走棋
+    if (this.isSpectator) {
+      console.log('[Chess] onGameStart → spectator mode, skip AI trigger');
+      return;
+    }
+    
+    // PvAI 模式：若当前不是玩家回合（玩家执黑时 AI 红方先手），触发 AI
+    if (this.roomType === 'pv_ai' && this.currentTurn !== this.role) {
+      console.log('[Chess] onGameStart → AI turn, triggering AI');
+      this._triggerAI();
     }
   }
 
@@ -65,11 +214,81 @@ class ChessGameAdapter {
       const { fr, fc, tr, tc } = data;
       this._applyMove(fr, fc, tr, tc);
       this._render();
+    } else if (data.action === 'sync_state' && data.game_state && typeof this.restoreGameState === 'function') {
+      // 观战者接收 sync_state 时，检测是否有新的走棋动作，如有则触发特效
+      const newState = data.game_state;
+      const oldLastMove = this.lastMove;
+      const newLastMove = newState.lastMove;
+      
+      // 检测是否有新的走棋动作
+      const hasMoveChange = newLastMove && (
+        !oldLastMove ||
+        newLastMove.fr !== oldLastMove.fr ||
+        newLastMove.fc !== oldLastMove.fc ||
+        newLastMove.tr !== oldLastMove.tr ||
+        newLastMove.tc !== oldLastMove.tc
+      );
+      
+      if (hasMoveChange) {
+        // 检测是否有吃子（当前棋盘目标位置有棋子）
+        const targetPiece = this.board[newLastMove.tr]?.[newLastMove.tc];
+        if (targetPiece) {
+          this._createCaptureEffect(newLastMove.tr, newLastMove.tc, targetPiece.color);
+        }
+        // 触发移动轨迹和落子波纹
+        this._createMoveTrail(newLastMove.fr, newLastMove.fc, newLastMove.tr, newLastMove.tc);
+        this._createLandingRipple(newLastMove.tr, newLastMove.tc);
+      }
+      
+      // 检测是否新产生将军
+      const oldCheckColor = this.checkColor;
+      this.restoreGameState(newState);
+      if (this.checkColor && this.checkColor !== oldCheckColor) {
+        this._triggerCheckEffect();
+      }
     }
   }
 
   onOpponentLeave() {
     this._showNotice('对手已离开房间');
+  }
+
+  /**
+   * 供 room.js 调用：用服务端下发的当前局状态恢复棋盘（新人加入/重连/观战）
+   * @param {Object} state - { board, currentTurn, moveCount, lastMove, checkColor, gameOver }
+   */
+  restoreGameState(state) {
+    if (!state || !state.board) return;
+    this.board = state.board.map(row => row.map(cell => cell ? { ...cell } : null));
+    this.currentTurn = state.currentTurn || 'red';
+    this.moveCount = state.moveCount || 0;
+    this.lastMove = state.lastMove ? { ...state.lastMove } : null;
+    this.checkColor = state.checkColor || null;
+    this.gameOver = !!state.gameOver;
+    this.selected = null;
+    this._render();
+    if (state.gameOver && state.winner_role && typeof this.notifyGameOver === 'function') {
+      this.notifyGameOver({
+        winner_role: state.winner_role,
+        message: state.winner_role === 'red' ? '红方获胜' : '黑方获胜',
+        sub: '本局已结束',
+      });
+    }
+  }
+
+  /** 当前局可序列化状态，用于 PvP 走棋时上报服务端 */
+  getStateSnapshot() {
+    const board = this.board.map(row => row.map(cell => cell ? { type: cell.type, color: cell.color } : null));
+    const snap = {
+      board,
+      currentTurn: this.currentTurn,
+      moveCount: this.moveCount,
+      lastMove: this.lastMove ? { ...this.lastMove } : null,
+      checkColor: this.checkColor,
+      gameOver: this.gameOver,
+    };
+    if (this.gameOver) snap.winner_role = this.currentTurn === 'red' ? 'black' : 'red';
+    return snap;
   }
 
   // ── 棋盘初始布局 ──────────────────────────────────────────────────────────
@@ -96,6 +315,9 @@ class ChessGameAdapter {
 
   // ── DOM 构建 ──────────────────────────────────────────────────────────────
   _buildDOM() {
+    // 先计算棋盘尺寸
+    this._calcBoardSize();
+    
     const COLS = 8; const ROWS = 9;
     const W = this.CELL * COLS;
     const H = this.CELL * ROWS;
@@ -120,13 +342,15 @@ class ChessGameAdapter {
             <div class="chess-grid" id="chGrid" style="width:${totalW}px;height:${totalH}px;position:relative;">
               <canvas id="chCanvas" width="${totalW}" height="${totalH}" style="display:block;"></canvas>
               <div class="chess-pieces" id="chPieces" style="width:${totalW}px;height:${totalH}px;"></div>
+              <div class="chess-effects-layer" id="chEffects" style="width:${totalW}px;height:${totalH}px;"></div>
             </div>
           </div>
         </div>
       </div>`;
 
-    this.canvas     = this.container.querySelector('#chCanvas');
+    this.canvas      = this.container.querySelector('#chCanvas');
     this.piecesLayer = this.container.querySelector('#chPieces');
+    this.effectsLayer = this.container.querySelector('#chEffects');
 
     // 点击事件
     this.piecesLayer.addEventListener('click', (e) => this._onBoardClick(e));
@@ -144,12 +368,24 @@ class ChessGameAdapter {
     const W = C * 8; const H = C * 9;
 
     ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    
+    // 启用抗锯齿
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
 
-    ctx.strokeStyle = 'rgba(80,50,10,0.7)';
+    // 绘制主线条（深色）
+    ctx.strokeStyle = 'rgba(70, 45, 15, 0.85)';
+    ctx.lineWidth = 1.5;
+
+    // 外框（双线效果）
+    ctx.strokeRect(P - 1, P - 1, W + 2, H + 2);
+    ctx.strokeStyle = 'rgba(90, 60, 20, 0.6)';
     ctx.lineWidth = 1;
-
-    // 外框
     ctx.strokeRect(P, P, W, H);
+    
+    // 恢复主线条样式
+    ctx.strokeStyle = 'rgba(70, 45, 15, 0.75)';
+    ctx.lineWidth = 1;
 
     // 横线
     for (let r = 0; r <= 9; r++) {
@@ -188,6 +424,7 @@ class ChessGameAdapter {
     ctx.beginPath(); ctx.moveTo(P + 5*C, P + 7*C); ctx.lineTo(P + 3*C, P + 9*C); ctx.stroke();
 
     // 炮兵位标记（小十字）
+    ctx.strokeStyle = 'rgba(70, 45, 15, 0.7)';
     const markPos = [
       [2,1],[2,7],[7,1],[7,7],
       [3,0],[3,2],[3,4],[3,6],[3,8],
@@ -197,31 +434,76 @@ class ChessGameAdapter {
       this._drawMark(ctx, P + c*C, P + r*C);
     }
 
-    // 河界文字
+    // 绘制交叉点的微小灰色点（增加精细感）
+    ctx.fillStyle = 'rgba(70, 45, 15, 0.3)';
+    for (let r = 0; r <= 9; r++) {
+      for (let c = 0; c <= 8; c++) {
+        // 跳过河界区域
+        if ((r === 4 || r === 5) && c > 0 && c < 8) continue;
+        ctx.beginPath();
+        ctx.arc(P + c * C, P + r * C, 2, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // 河界文字（更精美的字体）
     ctx.save();
-    ctx.font = '16px STKaiti, KaiTi, serif';
-    ctx.fillStyle = 'rgba(80,50,10,0.5)';
+    ctx.font = 'bold 18px STKaiti, KaiTi, "Noto Serif SC", serif';
+    ctx.fillStyle = 'rgba(90, 60, 25, 0.55)';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
+    
+    // 添加文字阴影效果
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.1)';
+    ctx.shadowBlur = 2;
+    ctx.shadowOffsetX = 1;
+    ctx.shadowOffsetY = 1;
+    
     ctx.fillText('楚 河', P + 2 * C, P + 4.5 * C);
-    ctx.fillText('汉 界', P + 6 * C, P + 4.5 * C);
+    ctx.fillText('漢 界', P + 6 * C, P + 4.5 * C);
     ctx.restore();
   }
 
   _drawMark(ctx, x, y) {
-    const s = 4;
-    ctx.beginPath();
-    ctx.moveTo(x - s, y - s * 2); ctx.lineTo(x - s, y - s);
-    ctx.lineTo(x - s * 2, y - s); ctx.moveTo(x - s, y - s); ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(x + s, y - s * 2); ctx.lineTo(x + s, y - s);
-    ctx.lineTo(x + s * 2, y - s); ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(x - s, y + s * 2); ctx.lineTo(x - s, y + s);
-    ctx.lineTo(x - s * 2, y + s); ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(x + s, y + s * 2); ctx.lineTo(x + s, y + s);
-    ctx.lineTo(x + s * 2, y + s); ctx.stroke();
+    const s = 5;
+    const gap = 3;
+    ctx.lineWidth = 1.2;
+    
+    // 左上
+    if (x > this.PADDING + this.CELL * 0.5) {
+      ctx.beginPath();
+      ctx.moveTo(x - gap, y - s - gap); 
+      ctx.lineTo(x - gap, y - gap);
+      ctx.lineTo(x - s - gap, y - gap); 
+      ctx.stroke();
+    }
+    
+    // 右上
+    if (x < this.PADDING + this.CELL * 7.5) {
+      ctx.beginPath();
+      ctx.moveTo(x + gap, y - s - gap); 
+      ctx.lineTo(x + gap, y - gap);
+      ctx.lineTo(x + s + gap, y - gap); 
+      ctx.stroke();
+    }
+    
+    // 左下
+    if (x > this.PADDING + this.CELL * 0.5) {
+      ctx.beginPath();
+      ctx.moveTo(x - gap, y + s + gap); 
+      ctx.lineTo(x - gap, y + gap);
+      ctx.lineTo(x - s - gap, y + gap); 
+      ctx.stroke();
+    }
+    
+    // 右下
+    if (x < this.PADDING + this.CELL * 7.5) {
+      ctx.beginPath();
+      ctx.moveTo(x + gap, y + s + gap); 
+      ctx.lineTo(x + gap, y + gap);
+      ctx.lineTo(x + s + gap, y + gap); 
+      ctx.stroke();
+    }
   }
 
   // ── 渲染棋子 ──────────────────────────────────────────────────────────────
@@ -269,8 +551,13 @@ class ChessGameAdapter {
         div.dataset.r = r;
         div.dataset.c = c;
 
-        // 可走子：己方棋子且当前可控制 → 添加 movable 类（显示手型游标和 hover 效果）
-        if (canControl && piece.color === this.role) {
+        const isOwnPiece = !this.isSpectator && piece.color === this.role;
+        if (isOwnPiece) {
+          div.classList.add('own');
+        } else if (!this.isSpectator) {
+          div.classList.add('opponent');
+        }
+        if (canControl && isOwnPiece) {
           div.classList.add('movable');
         }
 
@@ -344,18 +631,27 @@ class ChessGameAdapter {
     cnt.textContent = `第 ${Math.floor(this.moveCount / 2) + 1} 回合`;
   }
 
-  // ── 人机切换角色（玩家从红方↔黑方，重置游戏）─────────────────────────────
-  swapRole() {
-    if (this.roomType !== 'pv_ai') return;
-    this.role = this.role === 'red' ? 'black' : 'red';
+  // ── 重置棋盘（玩家离开/观战时由 room.js 调用） ─────────────────────────────
+  reset(reason) {
     this.board = this._createInitialBoard();
     this.selected = null;
     this.currentTurn = 'red';
     this.moveCount = 0;
     this.gameOver = false;
+    this.gameStarted = false;
     this.lastMove = null;
     this.checkColor = null;
     this._render();
+    if (reason) this._showNotice(reason);
+  }
+
+  // ── 人机切换角色（玩家从红方↔黑方，重置游戏）─────────────────────────────
+  swapRole() {
+    if (this.roomType !== 'pv_ai') return;
+    this.role = this.role === 'red' ? 'black' : 'red';
+    this.reset();
+    // PvAI 始终视为已开始
+    this.gameStarted = true;
     // 若玩家执黑，AI（红方）先手
     if (this.currentTurn !== this.role) {
       this._triggerAI();
@@ -364,17 +660,44 @@ class ChessGameAdapter {
 
   // ── 点击处理 ──────────────────────────────────────────────────────────────
   _canControl() {
-    if (this.gameOver) return false;
-    if (!this.gameStarted && this.roomType !== 'pv_ai') return false;
-    if (this.isSpectator) return false;
-    if (this.currentTurn !== this.role) return false;
-    return true;
+    // 观战者直接返回 false，不可操作
+    if (this.isSpectator) {
+      console.log('[Chess] _canControl → spectator mode, cannot control');
+      return false;
+    }
+    
+    const result = !(
+      this.gameOver || 
+      (!this.gameStarted && this.roomType !== 'pv_ai') || 
+      this.currentTurn !== this.role
+    );
+    console.log('[Chess] _canControl check →', 
+      'gameOver:', this.gameOver,
+      'gameStarted:', this.gameStarted,
+      'roomType:', this.roomType,
+      'isSpectator:', this.isSpectator,
+      'currentTurn:', this.currentTurn,
+      'role:', this.role,
+      '| canControl:', result);
+    return result;
   }
 
   _onPieceClick(r, c) {
-    if (!this._canControl()) return;
-
     const piece = this.board[r][c];
+
+    if (!this._canControl()) {
+      // 点击己方棋子但无法操作时，显示原因提示
+      if (piece && piece.color === this.role && !this.isSpectator) {
+        if (this.gameOver) this._showNotice('游戏已结束');
+        else if (!this.gameStarted && this.roomType !== 'pv_ai') this._showNotice('等待对手加入...');
+        else if (this.currentTurn !== this.role) this._showNotice('等待对方走棋');
+      }
+      console.log('[Chess] click blocked → gameOver:', this.gameOver,
+        'gameStarted:', this.gameStarted, 'roomType:', this.roomType,
+        'isSpectator:', this.isSpectator, 'currentTurn:', this.currentTurn,
+        'role:', this.role);
+      return;
+    }
 
     if (this.selected) {
       // 已选中：判断是否点击了合法目标
@@ -444,9 +767,17 @@ class ChessGameAdapter {
     this.selected = null;
     this._render();
 
-    // 发送给对手（PvP）
+    // PvP：发送给对手并带当前局状态供服务端缓存
     if (this.roomType === 'pvp' && typeof this.sendAction === 'function') {
-      this.sendAction({ action: 'move', fr, fc, tr, tc });
+      this.sendAction({
+        action: 'move',
+        fr, fc, tr, tc,
+        game_state: this.getStateSnapshot(),
+      });
+    }
+    // PvAI：同步战局到服务端，供观战者获取最新局面
+    if (this.roomType === 'pv_ai' && typeof this.sendAction === 'function') {
+      this.sendAction({ action: 'sync_state', game_state: this.getStateSnapshot() });
     }
 
     // PvAI 模式：触发 AI 走棋
@@ -457,6 +788,16 @@ class ChessGameAdapter {
 
   _applyMove(fr, fc, tr, tc) {
     const captured = this.board[tr][tc];
+    const movingPiece = this.board[fr][fc];
+    
+    // 触发移动轨迹特效
+    this._createMoveTrail(fr, fc, tr, tc);
+    
+    // 如果有吃子，触发粒子爆炸效果
+    if (captured) {
+      this._createCaptureEffect(tr, tc, captured.color);
+    }
+    
     this.board[tr][tc] = this.board[fr][fc];
     this.board[fr][fc] = null;
     this.lastMove = { fr, fc, tr, tc };
@@ -466,9 +807,18 @@ class ChessGameAdapter {
     this.currentTurn = this.currentTurn === 'red' ? 'black' : 'red';
 
     // 判断将军
+    const prevCheckColor = this.checkColor;
     this.checkColor = null;
     if (ChessRules.isInCheck(this.board, 'red'))   this.checkColor = 'red';
     if (ChessRules.isInCheck(this.board, 'black')) this.checkColor = 'black';
+    
+    // 如果将军，触发震屏效果
+    if (this.checkColor && this.checkColor !== prevCheckColor) {
+      this._triggerCheckEffect();
+    }
+    
+    // 落子波纹效果
+    this._createLandingRipple(tr, tc);
 
     // 判断将死（无合法走法）
     const nextMoves = ChessRules.getAllMoves(this.board, this.currentTurn);
@@ -513,6 +863,9 @@ class ChessGameAdapter {
       if (mv && !this.gameOver) {
         this._applyMove(mv.fr, mv.fc, mv.tr, mv.tc);
         this._render();
+        if (this.roomType === 'pv_ai' && typeof this.sendAction === 'function') {
+          this.sendAction({ action: 'sync_state', game_state: this.getStateSnapshot() });
+        }
       }
     }, delay);
   }
@@ -522,14 +875,183 @@ class ChessGameAdapter {
     div.style.cssText = `
       position:absolute; top:50%; left:50%;
       transform:translate(-50%,-50%);
-      background:rgba(0,0,0,.8); color:#fff;
-      padding:12px 24px; border-radius:8px;
+      background:rgba(0,0,0,.85); color:#fff;
+      padding:14px 28px; border-radius:10px;
       font-size:15px; font-weight:600; z-index:100;
       pointer-events:none;
+      border: 1px solid rgba(255,200,100,0.3);
+      box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+      animation: notice-appear 0.3s ease-out;
     `;
     div.textContent = msg;
     this.container.querySelector('.chess-wrapper').appendChild(div);
-    setTimeout(() => div.remove(), 3000);
+    setTimeout(() => {
+      div.style.animation = 'notice-appear 0.3s ease-out reverse';
+      setTimeout(() => div.remove(), 300);
+    }, 2700);
+  }
+
+  // ── 特效方法 ──────────────────────────────────────────────────────────────
+  
+  /** 创建移动轨迹效果 */
+  _createMoveTrail(fr, fc, tr, tc) {
+    if (!this.effectsLayer) return;
+    
+    const P = this.PADDING;
+    const C = this.CELL;
+    const x1 = P + fc * C;
+    const y1 = P + fr * C;
+    const x2 = P + tc * C;
+    const y2 = P + tr * C;
+    
+    // 计算距离和角度
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const distance = Math.sqrt(dx * dx + dy * dy);
+    const angle = Math.atan2(dy, dx) * 180 / Math.PI;
+    
+    const trail = document.createElement('div');
+    trail.className = 'move-trail';
+    trail.style.left = x1 + 'px';
+    trail.style.top = y1 + 'px';
+    trail.style.width = distance + 'px';
+    trail.style.transform = `rotate(${angle}deg)`;
+    
+    this.effectsLayer.appendChild(trail);
+    setTimeout(() => trail.remove(), 400);
+  }
+  
+  /** 创建落子波纹效果 */
+  _createLandingRipple(r, c) {
+    if (!this.effectsLayer) return;
+    
+    const P = this.PADDING;
+    const C = this.CELL;
+    const x = P + c * C;
+    const y = P + r * C;
+    
+    // 创建多层波纹
+    for (let i = 0; i < 2; i++) {
+      setTimeout(() => {
+        const ripple = document.createElement('div');
+        ripple.className = 'landing-ripple';
+        ripple.style.left = x + 'px';
+        ripple.style.top = y + 'px';
+        this.effectsLayer.appendChild(ripple);
+        setTimeout(() => ripple.remove(), 500);
+      }, i * 100);
+    }
+  }
+  
+  /** 创建吃子粒子爆炸效果 */
+  _createCaptureEffect(r, c, capturedColor) {
+    if (!this.effectsLayer) return;
+    
+    const P = this.PADDING;
+    const C = this.CELL;
+    const x = P + c * C;
+    const y = P + r * C;
+    
+    // 中心闪光
+    const flash = document.createElement('div');
+    flash.className = 'capture-flash';
+    flash.style.left = x + 'px';
+    flash.style.top = y + 'px';
+    this.effectsLayer.appendChild(flash);
+    setTimeout(() => flash.remove(), 350);
+    
+    // 冲击波
+    const shockwave = document.createElement('div');
+    shockwave.className = 'capture-shockwave';
+    shockwave.style.left = x + 'px';
+    shockwave.style.top = y + 'px';
+    this.effectsLayer.appendChild(shockwave);
+    setTimeout(() => shockwave.remove(), 500);
+    
+    // 粒子爆炸
+    const particleCount = 12;
+    for (let i = 0; i < particleCount; i++) {
+      this._createParticle(x, y, capturedColor, i, particleCount);
+    }
+    
+    // 火花粒子
+    const sparkCount = 8;
+    for (let i = 0; i < sparkCount; i++) {
+      this._createSparkParticle(x, y, i, sparkCount);
+    }
+  }
+  
+  /** 创建单个粒子 */
+  _createParticle(x, y, color, index, total) {
+    if (!this.effectsLayer) return;
+    
+    const particle = document.createElement('div');
+    particle.className = `particle ${color}`;
+    particle.style.left = x + 'px';
+    particle.style.top = y + 'px';
+    
+    // 计算随机方向和距离
+    const angle = (index / total) * Math.PI * 2 + (Math.random() - 0.5) * 0.5;
+    const distance = 40 + Math.random() * 50;
+    const duration = 400 + Math.random() * 200;
+    const targetX = x + Math.cos(angle) * distance;
+    const targetY = y + Math.sin(angle) * distance;
+    const scale = 0.5 + Math.random() * 0.5;
+    
+    particle.style.transition = `all ${duration}ms cubic-bezier(0.25, 0.46, 0.45, 0.94)`;
+    
+    this.effectsLayer.appendChild(particle);
+    
+    // 强制重绘后开始动画
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        particle.style.left = targetX + 'px';
+        particle.style.top = targetY + 'px';
+        particle.style.transform = `translate(-50%, -50%) scale(${scale})`;
+        particle.style.opacity = '0';
+      });
+    });
+    
+    setTimeout(() => particle.remove(), duration + 50);
+  }
+  
+  /** 创建火花粒子 */
+  _createSparkParticle(x, y, index, total) {
+    if (!this.effectsLayer) return;
+    
+    const spark = document.createElement('div');
+    spark.className = 'particle spark';
+    spark.style.left = x + 'px';
+    spark.style.top = y + 'px';
+    
+    const angle = (index / total) * Math.PI * 2 + Math.random() * 0.3;
+    const distance = 60 + Math.random() * 40;
+    const duration = 300 + Math.random() * 150;
+    const targetX = x + Math.cos(angle) * distance;
+    const targetY = y + Math.sin(angle) * distance - 20; // 稍微上浮
+    
+    spark.style.transition = `all ${duration}ms ease-out`;
+    
+    this.effectsLayer.appendChild(spark);
+    
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        spark.style.left = targetX + 'px';
+        spark.style.top = targetY + 'px';
+        spark.style.opacity = '0';
+      });
+    });
+    
+    setTimeout(() => spark.remove(), duration + 50);
+  }
+  
+  /** 将军震屏效果 */
+  _triggerCheckEffect() {
+    const wrapper = this.container.querySelector('.chess-wrapper');
+    if (wrapper) {
+      wrapper.classList.add('shake');
+      setTimeout(() => wrapper.classList.remove('shake'), 400);
+    }
   }
 }
 

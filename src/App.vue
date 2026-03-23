@@ -13,8 +13,6 @@ import ServerControl from "./components/ServerControl.vue";
   font-size: 16px;
   line-height: 1.5;
   font-weight: 400;
-  color: #0f0f0f;
-  background-color: #f6f6f6;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -25,10 +23,7 @@ import ServerControl from "./components/ServerControl.vue";
   box-sizing: border-box;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #0f0f0f;
-  }
+html, body {
+  background: #1a1a2e;
 }
 </style>

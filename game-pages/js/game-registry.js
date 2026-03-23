@@ -28,16 +28,42 @@ const GAME_REGISTRY = {
   },
 
   // ── 未来游戏在此扩展，room.html / lobby.js 无需改动 ──────────────────────
-  // gomoku: {
-  //   key: 'gomoku',
-  //   name: '五子棋',
-  //   icon: '⚫',
-  //   desc: '经典五子棋，先连五子者胜',
+
+  gomoku: {
+    key: 'gomoku',
+    name: '五子棋',
+    icon: '⚫',
+    desc: '经典五子棋，先连五子者胜（黑白棋，15路棋盘）',
+    maxPlayers: 2,
+    minPlayers: 2,
+    supportsAI: true,
+    scriptPath: 'games/gomoku/game.js',
+    cssPath: 'games/gomoku/game.css',
+  },
+
+  word_spot: {
+    key: 'word_spot',
+    name: '文字找茬',
+    icon: '🔍',
+    desc: '海量文字中找出那个不一样的字，1-12人同场竞戒，多关卡赛制',
+    maxPlayers: 12,
+    minPlayers: 1,
+    supportsAI: false,
+    scriptPath: 'games/word-spot/game.js',
+    cssPath: 'games/word-spot/game.css',
+  },
+
+  // ── 继续添加更多游戏 ────────────────────────────────────────────────────────
+  // example: {
+  //   key: 'example',
+  //   name: '示例游戏',
+  //   icon: '🎮',
+  //   desc: '...',
   //   maxPlayers: 2,
   //   minPlayers: 2,
-  //   supportsAI: true,
-  //   scriptPath: 'games/gomoku/game.js',
-  //   cssPath: 'games/gomoku/game.css',
+  //   supportsAI: false,
+  //   scriptPath: 'games/example/game.js',
+  //   cssPath: 'games/example/game.css',
   // },
 };
 
