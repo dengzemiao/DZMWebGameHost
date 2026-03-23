@@ -6,7 +6,8 @@
 
 - Node.js >= v22.12.0
 - Rust >= 1.84.0（含 cargo）
-- [Tauri 系统依赖](https://tauri.app/start/prerequisites/)（macOS 需 Xcode Command Line Tools，Windows 需 WebView2 + MSVC）
+- [Tauri 系统依赖](https://tauri.app/start/prerequisites/)（macOS 需 Xcode Command Line Tools）
+- **Windows 额外要求：** 需安装 **Visual Studio Installer**，并勾选工作负载 **「使用 C++ 的桌面开发」**（提供 MSVC、Windows SDK 等，Rust / Tauri 编译原生代码依赖）。另需系统已安装 **WebView2**（Win10/11 通常自带，缺失时按 [Tauri 文档](https://tauri.app/start/prerequisites/) 安装）。
 
 ## 启动开发
 
