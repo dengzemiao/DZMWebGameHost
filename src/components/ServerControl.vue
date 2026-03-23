@@ -15,6 +15,7 @@ const errorMsg = ref("");
 const qrCanvas = ref(null);
 
 let pollTimer = null;
+let initialLoaded = false;
 
 async function fetchStatus() {
   try {
@@ -22,8 +23,12 @@ async function fetchStatus() {
     serverRunning.value = status.running;
     onlineCount.value = status.online_count;
     localIp.value = status.local_ip;
-    port.value = status.port;
+    // 只在首次加载或服务运行中时同步端口，避免轮询覆盖用户正在编辑的值
+    if (!initialLoaded || status.running) {
+      port.value = status.port;
+    }
     address.value = status.address;
+    initialLoaded = true;
   } catch (e) {
     console.error("Failed to get status:", e);
   }

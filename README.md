@@ -43,6 +43,38 @@ npm run build:win   # 输出 .exe 安装包
 
 > `src-tauri/Cargo.toml` 中也有 `version`，但那是 Rust 包版本，不影响打包结果，建议跟着一起改保持一致即可，非必须。
 
+## 应用图标（Logo）
+
+**放哪：** 源图放在 **`src-tauri/icons/icon.png`**（覆盖同名文件即可）。  
+**规格：** 建议 **1024×1024 像素** 的 **标准 PNG**（RGBA 透明底或纯色底均可；macOS 会自己加圆角，源图不必裁圆角）。
+
+**一键生成（macOS + Windows 共用）：** 在项目根目录执行：
+
+```bash
+npm run tauri icon src-tauri/icons/icon.png
+```
+
+也可先用任意路径的源图生成到默认的 `src-tauri/icons/`：
+
+```bash
+npm run tauri icon /你的路径/logo.png
+```
+
+生成后会更新 `icon.png`、`icon.icns`（macOS）、`icon.ico`（Windows）及各尺寸 `Square*.png` 等，与 `tauri.conf.json` 里 `bundle.icon` 配置一致。改完图标后重新执行 **打包构建** 即可。
+
+**常见错误1：** 若出现 `Invalid PNG signature`，说明文件**不是合法 PNG**（例如把 JPG/WebP 强行改名为 `.png`）。请在设计软件或预览里 **「导出为 PNG」** 再替换，勿仅改扩展名。
+
+**常见错误2（Windows）：图标替换后安装包安装完桌面图标仍显示旧图标。**  
+这是 Windows 图标缓存未刷新导致的，与打包内容无关。在 PowerShell（管理员）中执行以下命令清除缓存，执行后桌面会短暂消失再恢复，图标即可正确显示：
+
+```powershell
+taskkill /f /im explorer.exe
+Remove-Item -Force "$env:LOCALAPPDATA\IconCache.db" -ErrorAction SilentlyContinue
+Remove-Item -Force -Recurse "$env:LOCALAPPDATA\Microsoft\Windows\Explorer\iconcache*" -ErrorAction SilentlyContinue
+Remove-Item -Force -Recurse "$env:LOCALAPPDATA\Microsoft\Windows\Explorer\thumbcache*" -ErrorAction SilentlyContinue
+Start-Process explorer.exe
+```
+
 ---
 
 辅助文档：https://juejin.cn/post/7602544700475752458

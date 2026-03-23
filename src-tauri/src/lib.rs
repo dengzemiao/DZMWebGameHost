@@ -138,11 +138,12 @@ pub fn run() {
                     .expect("Failed to get project root")
                     .join("game-pages")
             } else {
-                // 生产模式：game-pages 被打包到 resource 目录中
+                // 生产模式：tauri.conf.json resources 配置为 "../game-pages/**/*"
+                // Tauri 打包时 ".." 会被映射为 "_up_"，实际路径为 resource_dir/_up_/game-pages
                 app.path()
                     .resource_dir()
                     .expect("Failed to get resource dir")
-                    .join("game-pages")
+                    .join("_up_/game-pages")
             };
 
             println!("[DZMWebGameHost] game_pages_dir: {:?}", game_pages_dir);
