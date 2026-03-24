@@ -78,8 +78,6 @@ Start-Process explorer.exe
 
 ---
 
-辅助文档：https://juejin.cn/post/7602544700475752458
-
 [Rust 多版本管理](https://blog.csdn.net/zz00008888/article/details/157730032)
 
 [Mac 软件安装问题：未签名应用「已损坏」问题解决方案](https://blog.csdn.net/zz00008888/article/details/157727094)
