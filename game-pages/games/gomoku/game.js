@@ -16,6 +16,19 @@
  *   'spectator' — 观战
  */
 
+// AI Worker 单例（后台线程计算，不阻塞 UI）
+let _gomokuAIWorker = null;
+function getGomokuAIWorker() {
+  if (!_gomokuAIWorker) {
+    try {
+      _gomokuAIWorker = new Worker('games/gomoku/ai-worker.js');
+    } catch (e) {
+      console.warn('[Gomoku] Worker 创建失败，回退到主线程 AI', e);
+    }
+  }
+  return _gomokuAIWorker;
+}
+
 class GomokuGameAdapter {
   constructor(container, config) {
     this.container   = container;
@@ -365,7 +378,7 @@ class GomokuGameAdapter {
 
     stoneEl.className = `gm-turn-stone ${this.currentTurn}`;
     const colorLabel = this.currentTurn === 'black' ? '黑方' : '白方';
-    const diffMap    = { easy: '简单', normal: '普通', hard: '困难' };
+    const diffMap    = { easy: '简单', normal: '普通', hard: '困难', hell: '地狱' };
 
     if (this.gameOver) {
       textEl.textContent = this.winLine
@@ -504,28 +517,46 @@ class GomokuGameAdapter {
     this.currentTurn = color === 'black' ? 'white' : 'black';
   }
 
-  // ── AI 落子 ───────────────────────────────────────────────────────────────
+  // ── AI 落子（Web Worker 异步，不阻塞 UI）───────────────────────────────────
   _triggerAI() {
-    if (this.currentTurn === this.role) return;  // 玩家回合
+    if (this.currentTurn === this.role) return;
     if (this.gameOver) return;
 
     const aiEl = document.getElementById('gmAiThinking');
     if (aiEl) aiEl.classList.add('active');
     this._updateStatusBar();
 
-    const delay = { easy: 300, normal: 500, hard: 700 }[this.difficulty] || 500;
-    setTimeout(() => {
+    const worker = getGomokuAIWorker();
+    if (!worker) {
       if (aiEl) aiEl.classList.remove('active');
-      if (this.gameOver) return;
+      return;
+    }
 
-      const mv = GomokuAI.bestMove(this.board, this.currentTurn, this.difficulty, this.SIZE);
-      if (mv && !this.gameOver) {
-        this._applyPlace(mv.r, mv.c);
-        this._render();
-        if (this.roomType === 'pv_ai' && typeof this.sendAction === 'function') {
-          this.sendAction({ action: 'sync_state', game_state: this.getStateSnapshot() });
+    const boardCopy = this.board.map(row =>
+      row.map(cell => cell ? { color: cell.color } : null)
+    );
+    const color = this.currentTurn;
+    const difficulty = this.difficulty;
+    const SIZE = this.SIZE;
+
+    const delay = { easy: 200, normal: 300, hard: 300, hell: 300 }[difficulty] || 300;
+
+    setTimeout(() => {
+      worker.onmessage = (e) => {
+        if (aiEl) aiEl.classList.remove('active');
+        const mv = e.data.move;
+        if (mv && !this.gameOver) {
+          this._applyPlace(mv.r, mv.c);
+          this._render();
+          if (this.roomType === 'pv_ai' && typeof this.sendAction === 'function') {
+            this.sendAction({ action: 'sync_state', game_state: this.getStateSnapshot() });
+          }
         }
-      }
+      };
+      worker.onerror = () => {
+        if (aiEl) aiEl.classList.remove('active');
+      };
+      worker.postMessage({ board: boardCopy, color, difficulty, SIZE });
     }, delay);
   }
 
@@ -626,165 +657,6 @@ const GomokuRules = (function () {
   return { checkWin, getWinLine, isBoardFull };
 })();
 
-// ══════════════════════════════════════════════════════════════════════════════
-// GomokuAI — 五子棋 AI（威胁评分算法）
-// ══════════════════════════════════════════════════════════════════════════════
-const GomokuAI = (function () {
-  'use strict';
-
-  const DIRS = [[0, 1], [1, 0], [1, 1], [1, -1]];
-
-  /**
-   * 评分表：[count][openEnds] → score
-   *   openEnds: 0=两端封堵, 1=一端开放, 2=两端开放
-   */
-  const SCORE_TABLE = {
-    5: { 0: 200000, 1: 200000, 2: 200000 },  // 五连 → 必赢
-    4: { 0: 0,      1: 5000,   2: 80000  },  // 四连活四/冲四
-    3: { 0: 0,      1: 300,    2: 8000   },  // 三连活三/眠三
-    2: { 0: 0,      1: 30,     2: 300    },  // 二连活二/眠二
-    1: { 0: 0,      1: 3,      2: 15     },  // 单子
-  };
-
-  /** 评估在一个方向上，以 (r,c) 为中心的 color 颜色的威胁分 */
-  function scoreDirForColor(board, r, c, dr, dc, color, SIZE) {
-    const opp = color === 'black' ? 'white' : 'black';
-
-    // 正方向连子数 + 是否末端开放
-    let fwd = 0, fwdOpen = false;
-    let nr = r + dr, nc = c + dc;
-    while (nr >= 0 && nr < SIZE && nc >= 0 && nc < SIZE && board[nr][nc]?.color === color) {
-      fwd++; nr += dr; nc += dc;
-    }
-    if (nr >= 0 && nr < SIZE && nc >= 0 && nc < SIZE && !board[nr][nc]) fwdOpen = true;
-
-    // 反方向连子数 + 是否末端开放
-    let bwd = 0, bwdOpen = false;
-    nr = r - dr; nc = c - dc;
-    while (nr >= 0 && nr < SIZE && nc >= 0 && nc < SIZE && board[nr][nc]?.color === color) {
-      bwd++; nr -= dr; nc -= dc;
-    }
-    if (nr >= 0 && nr < SIZE && nc >= 0 && nc < SIZE && !board[nr][nc]) bwdOpen = true;
-
-    const count    = fwd + bwd + 1;
-    const openEnds = (fwdOpen ? 1 : 0) + (bwdOpen ? 1 : 0);
-    const key      = Math.min(count, 5);
-    return (SCORE_TABLE[key]?.[openEnds]) || 0;
-  }
-
-  /** 评估在 (r,c) 落下 color 颜色棋子的总威胁分 */
-  function evaluatePos(board, r, c, color, SIZE) {
-    board[r][c] = { color };  // 临时落子
-    let score = 0;
-    for (const [dr, dc] of DIRS) {
-      score += scoreDirForColor(board, r, c, dr, dc, color, SIZE);
-    }
-    board[r][c] = null;       // 还原
-    return score;
-  }
-
-  /**
-   * 获取候选落子位置（已有棋子周围 range 格内的空格）
-   * 棋盘为空时返回天元附近
-   */
-  function getCandidates(board, SIZE, range) {
-    const set = new Set();
-    let hasPiece = false;
-
-    for (let r = 0; r < SIZE; r++) {
-      for (let c = 0; c < SIZE; c++) {
-        if (!board[r][c]) continue;
-        hasPiece = true;
-        for (let dr = -range; dr <= range; dr++) {
-          for (let dc = -range; dc <= range; dc++) {
-            const nr = r + dr, nc = c + dc;
-            if (nr >= 0 && nr < SIZE && nc >= 0 && nc < SIZE && !board[nr][nc]) {
-              set.add(`${nr},${nc}`);
-            }
-          }
-        }
-      }
-    }
-
-    // 空棋盘：从天元开始
-    if (!hasPiece) {
-      const mid = Math.floor(SIZE / 2);
-      for (let dr = -1; dr <= 1; dr++) {
-        for (let dc = -1; dc <= 1; dc++) {
-          set.add(`${mid + dr},${mid + dc}`);
-        }
-      }
-    }
-
-    return [...set].map(k => {
-      const [r, c] = k.split(',').map(Number);
-      return { r, c };
-    });
-  }
-
-  /**
-   * 返回最佳落子位置
-   * @param {Array}  board      - 当前棋盘
-   * @param {string} color      - AI 颜色
-   * @param {string} difficulty - 'easy' | 'normal' | 'hard'
-   * @param {number} SIZE       - 棋盘路数（15）
-   * @returns {{ r, c } | null}
-   */
-  function bestMove(board, color, difficulty, SIZE) {
-    const opp  = color === 'black' ? 'white' : 'black';
-    const range = difficulty === 'easy' ? 1 : 2;
-    const candidates = getCandidates(board, SIZE, range);
-    if (candidates.length === 0) return null;
-
-    // easy 难度：从候选位置中随机选一个
-    if (difficulty === 'easy') {
-      const shuffled = candidates.sort(() => Math.random() - 0.5);
-      // 简单 AI 也会优先落在己方有棋子的附近，但不计算威胁
-      return shuffled[0];
-    }
-
-    let bestScore = -Infinity;
-    let bestMoves = [];
-    const mid = (SIZE - 1) / 2;
-
-    for (const { r, c } of candidates) {
-      const atkScore = evaluatePos(board, r, c, color, SIZE);
-      const defScore = evaluatePos(board, r, c, opp,   SIZE);
-
-      let score;
-      if (atkScore >= 200000 || defScore >= 200000) {
-        // 必赢或必须阻止对手赢：优先处理
-        score = Math.max(atkScore, defScore) + (atkScore >= 200000 ? 50000 : 0);
-      } else if (atkScore >= 80000 || defScore >= 80000) {
-        // 活四/对方活四：次优先
-        score = Math.max(atkScore * 1.2, defScore);
-      } else {
-        // 正常：进攻权重略高于防守
-        score = atkScore * 1.15 + defScore;
-      }
-
-      // hard 难度：靠近中心的位置给予轻微加成
-      if (difficulty === 'hard') {
-        const dist = Math.abs(r - mid) + Math.abs(c - mid);
-        score += Math.max(0, SIZE - dist) * 0.8;
-      }
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestMoves = [{ r, c }];
-      } else if (score === bestScore) {
-        bestMoves.push({ r, c });
-      }
-    }
-
-    // 多个最优解时随机选一个，避免 AI 总走同一步
-    return bestMoves[Math.floor(Math.random() * bestMoves.length)] || null;
-  }
-
-  return { bestMove };
-})();
-
 // ── 导出到全局 ────────────────────────────────────────────────────────────────
 window.GomokuGameAdapter = GomokuGameAdapter;
 window.GomokuRules       = GomokuRules;
-window.GomokuAI          = GomokuAI;

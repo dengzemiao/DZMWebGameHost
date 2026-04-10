@@ -246,15 +246,17 @@
     // 观战者只接收通知，不弹窗
     if (isSpectator) {
       let resultText = '';
+      const gameName = roomData ? roomData.game : '';
+      const winnerLabel = getRoleLabel(gameName, data.winner_role) || data.winner_role;
       if (data.reason === 'surrender') {
-        resultText = `${data.winner_role === 'red' ? '红方' : '黑方'}获胜（对方认输）`;
+        resultText = `${winnerLabel}获胜（对方认输）`;
       } else if (data.winner_role) {
-        resultText = `${data.winner_role === 'red' ? '红方' : '黑方'}获胜`;
+        resultText = data.message || `${winnerLabel}获胜`;
       } else {
         resultText = '游戏结束';
       }
       appendRoomSystem(resultText);
-      return; // 观战者直接返回，不弹窗
+      return;
     }
 
     const modal   = $('gameOverModal');
@@ -334,7 +336,7 @@
     const isPvAI = room.room_type === 'pv_ai';
     const maxPlayers = isPvAI ? 2 : (room.max_players || 2);
     const slots = [];
-    const diffMap = { easy: '简单', normal: '普通', hard: '困难' };
+    const diffMap = { easy: '简单', normal: '普通', hard: '困难', hell: '地狱' };
 
     for (let i = 0; i < maxPlayers; i++) {
       const roleForSlot = getRoleForSeatIndex(room.game, i);
@@ -538,7 +540,7 @@
       return;
     }
     aiInfo.style.display = 'flex';
-    const map = { easy: '简单难度', normal: '普通难度', hard: '困难难度' };
+    const map = { easy: '简单难度', normal: '普通难度', hard: '困难难度', hell: '地狱难度' };
     $('aiLevelLabel').textContent = map[room.ai_difficulty] || '普通难度';
   }
 
@@ -790,7 +792,7 @@
     if (game === 'chess') {
       return role === 'red' ? '红方' : role === 'black' ? '黑方' : role;
     }
-    if (game === 'gomoku') {
+    if (game === 'gomoku' || game === 'go') {
       return role === 'black' ? '黑方' : role === 'white' ? '白方' : role;
     }
     if (game === 'word_spot') {
@@ -804,7 +806,7 @@
   /** 指定席位索引对应的角色（用于 PvP 空位换位），无则返回 null */
   function getRoleForSeatIndex(game, index) {
     if (game === 'chess') return index === 0 ? 'red' : index === 1 ? 'black' : null;
-    if (game === 'gomoku') return index === 0 ? 'black' : index === 1 ? 'white' : null;
+    if (game === 'gomoku' || game === 'go') return index === 0 ? 'black' : index === 1 ? 'white' : null;
     if (game === 'word_spot') return `player${index + 1}`;
     return null;
   }
@@ -812,14 +814,14 @@
   /** 获取对手角色（PvAI 模式下 AI 的角色） */
   function getOpponentRole(game, playerRole) {
     if (game === 'chess') return playerRole === 'red' ? 'black' : 'red';
-    if (game === 'gomoku') return playerRole === 'black' ? 'white' : 'black';
+    if (game === 'gomoku' || game === 'go') return playerRole === 'black' ? 'white' : 'black';
     return null;
   }
 
   /** 获取角色的 CSS 类名 */
   function getRoleCssClass(game, role) {
     if (game === 'chess') return role === 'red' ? 'red' : 'black';
-    if (game === 'gomoku') return role === 'black' ? 'black' : 'white';
+    if (game === 'gomoku' || game === 'go') return role === 'black' ? 'black' : 'white';
     if (game === 'word_spot') return role === 'player1' ? 'host' : 'player';
     return role;
   }

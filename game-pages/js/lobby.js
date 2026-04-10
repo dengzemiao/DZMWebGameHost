@@ -132,7 +132,7 @@
 
     let diffLabel = '';
     if (room.room_type === 'pv_ai' && room.ai_difficulty) {
-      const map = { easy: '简单', normal: '普通', hard: '困难' };
+      const map = { easy: '简单', normal: '普通', hard: '困难', hell: '地狱' };
       diffLabel = `<span class="room-meta-item"><span class="meta-icon">🧠</span>${map[room.ai_difficulty] || ''}</span>`;
     }
 

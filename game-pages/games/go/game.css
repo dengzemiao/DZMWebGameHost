@@ -1,0 +1,632 @@
+/* ══════════════════════════════════════════════════════════════════════════════
+   围棋棋盘样式
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* ── 自定义属性 ────────────────────────────────────────────────────────────── */
+:root {
+  --go-board-bg: linear-gradient(135deg, #dcb87a 0%, #c9a660 25%, #be9650 50%, #b08840 75%, #a07832 100%);
+  --go-board-border: #6b4515;
+  --go-black-stone-bg: radial-gradient(ellipse 65% 55% at 35% 28%, #888 0%, #444 30%, #1a1a1a 60%, #080808 100%);
+  --go-white-stone-bg: radial-gradient(ellipse 65% 55% at 35% 28%, #fff 0%, #e8e8e8 30%, #cccccc 60%, #aaaaaa 100%);
+
+  /* 棋子尺寸变量（由 JS 动态设置） */
+  --go-piece-size: 28px;
+}
+
+/* ── 外层容器 ──────────────────────────────────────────────────────────────── */
+.go-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  padding: clamp(6px, 1.5vw, 12px);
+  gap: clamp(6px, 1.5vw, 10px);
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  background: radial-gradient(ellipse at center, rgba(30, 20, 10, 0.25) 0%, transparent 70%);
+  overflow: visible;
+}
+
+/* ── 棋盘外框 ──────────────────────────────────────────────────────────────── */
+.go-board-outer {
+  position: relative;
+  background: var(--go-board-bg);
+  border: clamp(3px, 0.8vw, 5px) solid var(--go-board-border);
+  border-radius: clamp(4px, 1vw, 8px);
+  box-shadow:
+    0 clamp(10px, 3vw, 20px) clamp(30px, 8vw, 60px) rgba(0, 0, 0, 0.55),
+    0 clamp(4px, 1vw, 8px)   clamp(10px, 2vw, 20px) rgba(0, 0, 0, 0.35),
+    inset 0 2px 4px rgba(255, 255, 255, 0.18),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.22);
+  overflow: hidden;
+  max-width: 100%;
+  touch-action: manipulation;
+}
+
+/* 木纹纹理叠加 */
+.go-board-outer::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='200' height='200' filter='url(%23n)' opacity='0.07'/%3E%3C/svg%3E");
+  pointer-events: none;
+  z-index: 0;
+  mix-blend-mode: overlay;
+}
+
+/* 光泽条纹 */
+.go-board-outer::after {
+  content: '';
+  position: absolute;
+  top: 0; left: -100%; right: -100%; bottom: 0;
+  background: linear-gradient(
+    108deg,
+    transparent 40%,
+    rgba(255,255,255,0.03) 45%,
+    rgba(255,255,255,0.06) 50%,
+    rgba(255,255,255,0.03) 55%,
+    transparent 60%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+.go-board-inner {
+  position: relative;
+  padding: var(--go-board-padding, clamp(12px, 3vw, 20px));
+  z-index: 2;
+}
+
+/* ── 棋盘格线区 ────────────────────────────────────────────────────────────── */
+.go-grid {
+  position: relative;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.08));
+}
+
+.go-grid canvas {
+  display: block;
+  cursor: pointer;
+}
+
+/* ── 棋子容器（绝对定位，不响应事件） ─────────────────────────────────────── */
+.go-pieces {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+}
+
+/* ── 特效容器 ──────────────────────────────────────────────────────────────── */
+.go-effects-layer {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 100;
+  overflow: visible;
+}
+
+/* ── 棋子（落在交叉点，transform 居中） ─────────────────────────────────────── */
+.go-stone {
+  position: absolute;
+  width:  var(--go-piece-size, 28px);
+  height: var(--go-piece-size, 28px);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 10;
+  transition: transform 0.1s cubic-bezier(0.34, 1.56, 0.64, 1);
+  will-change: transform, box-shadow;
+}
+
+/* 棋子高光伪元素 */
+.go-stone::after {
+  content: '';
+  position: absolute;
+  top: 10%;
+  left: 16%;
+  width: 55%;
+  height: 28%;
+  border-radius: 50%;
+  background: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  pointer-events: none;
+}
+
+/* ── 黑方棋子 ──────────────────────────────────────────────────────────────── */
+.go-stone.black {
+  background: var(--go-black-stone-bg);
+  border: 1.5px solid rgba(0, 0, 0, 0.9);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.55),
+    0 2px 4px  rgba(0, 0, 0, 0.4),
+    inset 0 2px 3px rgba(255, 255, 255, 0.15),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.3);
+}
+
+/* ── 白方棋子 ──────────────────────────────────────────────────────────────── */
+.go-stone.white {
+  background: var(--go-white-stone-bg);
+  border: 1.5px solid rgba(160, 160, 160, 0.7);
+  box-shadow:
+    0 4px 12px rgba(0, 0, 0, 0.4),
+    0 2px 4px  rgba(0, 0, 0, 0.25),
+    inset 0 2px 3px rgba(255, 255, 255, 0.7),
+    inset 0 -2px 3px rgba(0, 0, 0, 0.12);
+}
+
+/* ── 最后一手标记（中心红点） ──────────────────────────────────────────────── */
+.go-stone.last-move::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 28%;
+  height: 28%;
+  border-radius: 50%;
+  background: rgba(220, 50, 50, 0.92);
+  box-shadow: 0 0 6px rgba(220, 50, 50, 0.7);
+  z-index: 2;
+}
+
+/* ── 死子标记（半透明 X 标记，计分时使用） ─────────────────────────────────── */
+.go-stone.dead {
+  opacity: 0.45;
+}
+
+.go-stone.dead::before {
+  content: '✕';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: calc(var(--go-piece-size, 28px) * 0.5);
+  color: rgba(255, 80, 80, 0.95);
+  font-weight: 900;
+  line-height: 1;
+  z-index: 3;
+}
+
+/* ── 领地标记（计分期间显示） ──────────────────────────────────────────────── */
+.go-territory {
+  position: absolute;
+  width:  calc(var(--go-piece-size, 28px) * 0.35);
+  height: calc(var(--go-piece-size, 28px) * 0.35);
+  border-radius: 2px;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  z-index: 8;
+}
+
+.go-territory.black {
+  background: rgba(20, 20, 20, 0.75);
+  border: 1px solid rgba(0, 0, 0, 0.5);
+}
+
+.go-territory.white {
+  background: rgba(240, 240, 240, 0.8);
+  border: 1px solid rgba(180, 180, 180, 0.6);
+}
+
+/* ── 落子波纹特效 ──────────────────────────────────────────────────────────── */
+.go-ripple {
+  position: absolute;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0.4);
+  opacity: 1;
+  pointer-events: none;
+  z-index: 5;
+  animation: go-ripple-expand 0.55s ease-out forwards;
+}
+
+.go-ripple.black {
+  border: 2.5px solid rgba(80, 80, 80, 0.85);
+}
+
+.go-ripple.white {
+  border: 2.5px solid rgba(200, 200, 200, 0.85);
+}
+
+@keyframes go-ripple-expand {
+  0%   { transform: translate(-50%, -50%) scale(0.4); opacity: 1; border-width: 3px; }
+  100% { transform: translate(-50%, -50%) scale(2.0); opacity: 0; border-width: 1px; }
+}
+
+/* ── 提子消失特效 ──────────────────────────────────────────────────────────── */
+.go-stone.captured {
+  animation: go-captured 0.35s ease-out forwards;
+}
+
+@keyframes go-captured {
+  0%   { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
+  50%  { transform: translate(-50%, -50%) scale(1.2); opacity: 0.6; }
+  100% { transform: translate(-50%, -50%) scale(0);   opacity: 0; }
+}
+
+/* ── 状态栏 ────────────────────────────────────────────────────────────────── */
+.go-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  max-width: clamp(280px, 90vw, 560px);
+  padding: clamp(6px, 1.5vw, 10px) clamp(10px, 2.5vw, 18px);
+  background: linear-gradient(180deg, rgba(30, 22, 12, 0.88) 0%, rgba(18, 12, 6, 0.92) 100%);
+  border: 1px solid rgba(220, 180, 80, 0.2);
+  border-radius: clamp(8px, 2vw, 12px);
+  font-size: clamp(11px, 2vw, 13px);
+  color: rgba(255, 255, 255, 0.85);
+  backdrop-filter: blur(8px);
+  gap: clamp(6px, 1.5vw, 10px);
+  flex-wrap: wrap;
+  box-shadow:
+    0 4px 20px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* 回合指示器 */
+.go-turn-indicator {
+  display: flex;
+  align-items: center;
+  gap: clamp(5px, 1.2vw, 8px);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.go-turn-stone {
+  width:  clamp(13px, 2.2vw, 17px);
+  height: clamp(13px, 2.2vw, 17px);
+  border-radius: 50%;
+  flex-shrink: 0;
+  transition: all 0.35s ease;
+}
+
+.go-turn-stone.black {
+  background: radial-gradient(ellipse 65% 55% at 35% 30%, #888 0%, #444 35%, #111 100%);
+  border: 1.5px solid rgba(0, 0, 0, 0.8);
+  box-shadow:
+    0 0 10px rgba(100, 100, 100, 0.6),
+    0 0 20px rgba(80, 80, 80, 0.3),
+    inset 0 1px 2px rgba(255, 255, 255, 0.2);
+  animation: go-turn-pulse 1.5s ease-in-out infinite;
+}
+
+.go-turn-stone.white {
+  background: radial-gradient(ellipse 65% 55% at 35% 30%, #fff 0%, #ddd 35%, #aaa 100%);
+  border: 1.5px solid rgba(150, 150, 150, 0.6);
+  box-shadow:
+    0 0 10px rgba(220, 220, 220, 0.7),
+    0 0 20px rgba(180, 180, 180, 0.3),
+    inset 0 1px 2px rgba(255, 255, 255, 0.8);
+  animation: go-turn-pulse 1.5s ease-in-out infinite;
+}
+
+@keyframes go-turn-pulse {
+  0%, 100% { transform: scale(1);    opacity: 1; }
+  50%       { transform: scale(1.14); opacity: 0.85; }
+}
+
+/* 提子计数 */
+.go-captures {
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 2vw, 14px);
+  font-size: clamp(10px, 1.8vw, 12px);
+  color: rgba(255, 255, 255, 0.7);
+  flex-shrink: 0;
+}
+
+.go-capture-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.go-capture-stone {
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.go-capture-stone.black {
+  background: radial-gradient(ellipse 65% 55% at 35% 30%, #888 0%, #222 100%);
+  border: 1px solid rgba(0,0,0,0.8);
+}
+
+.go-capture-stone.white {
+  background: radial-gradient(ellipse 65% 55% at 35% 30%, #fff 0%, #aaa 100%);
+  border: 1px solid rgba(160,160,160,0.7);
+}
+
+.go-move-count {
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 11px;
+  flex-shrink: 0;
+}
+
+/* ── AI 思考提示 ────────────────────────────────────────────────────────────── */
+.go-ai-thinking {
+  display: none;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #ffc000;
+  font-weight: 700;
+  flex-shrink: 0;
+  text-shadow: 0 0 8px rgba(255, 192, 0, 0.4);
+}
+
+.go-ai-thinking.active {
+  display: flex;
+  animation: go-ai-fade 1s ease-in-out infinite alternate;
+}
+
+@keyframes go-ai-fade {
+  0%   { opacity: 0.65; }
+  100% { opacity: 1; }
+}
+
+.go-ai-spinner {
+  width: 13px;
+  height: 13px;
+  border: 2px solid rgba(255, 192, 0, 0.2);
+  border-top-color: #ffc000;
+  border-radius: 50%;
+  animation: go-spin 0.65s linear infinite;
+}
+
+@keyframes go-spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ── 操作按钮区 ─────────────────────────────────────────────────────────────── */
+.go-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(8px, 2vw, 14px);
+  flex-wrap: wrap;
+}
+
+.go-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: clamp(5px, 1.2vw, 8px) clamp(12px, 2.5vw, 20px);
+  font-size: clamp(11px, 2vw, 13px);
+  font-weight: 600;
+  border-radius: clamp(6px, 1.5vw, 10px);
+  border: 1.5px solid transparent;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.go-btn:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+  transform: none !important;
+}
+
+/* 虚手按钮 */
+.go-btn-pass {
+  background: linear-gradient(135deg, #2a6496 0%, #1a4a7a 100%);
+  border-color: rgba(100, 160, 220, 0.4);
+  color: #c8e0f8;
+  box-shadow:
+    0 3px 12px rgba(26, 74, 122, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+.go-btn-pass:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 5px 16px rgba(26, 74, 122, 0.65),
+    inset 0 1px 0 rgba(255, 255, 255, 0.15);
+  border-color: rgba(100, 160, 220, 0.7);
+}
+
+.go-btn-pass:not(:disabled):active {
+  transform: translateY(0);
+}
+
+/* 认输按钮 */
+.go-btn-resign {
+  background: linear-gradient(135deg, rgba(150, 40, 40, 0.8) 0%, rgba(100, 20, 20, 0.9) 100%);
+  border-color: rgba(220, 80, 80, 0.3);
+  color: #f8c8c8;
+  box-shadow:
+    0 3px 12px rgba(100, 20, 20, 0.45),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.go-btn-resign:not(:disabled):hover {
+  transform: translateY(-1px);
+  box-shadow:
+    0 5px 16px rgba(100, 20, 20, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  border-color: rgba(220, 80, 80, 0.6);
+}
+
+.go-btn-resign:not(:disabled):active {
+  transform: translateY(0);
+}
+
+/* ── 连续虚手提示（覆盖棋盘中央） ─────────────────────────────────────────── */
+.go-pass-notice {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: 8px 18px;
+  background: rgba(20, 14, 6, 0.88);
+  border: 1px solid rgba(220, 180, 80, 0.4);
+  border-radius: 8px;
+  color: rgba(255, 220, 120, 0.95);
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 200;
+  animation: go-notice-appear 0.3s ease-out;
+  backdrop-filter: blur(6px);
+}
+
+@keyframes go-notice-appear {
+  0%   { opacity: 0; transform: translate(-50%, -50%) scale(0.85); }
+  100% { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+}
+
+/* ── 计分面板 ──────────────────────────────────────────────────────────────── */
+.go-score-panel {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: clamp(280px, 90vw, 480px);
+  padding: clamp(10px, 2.5vw, 16px) clamp(14px, 3vw, 24px);
+  background: linear-gradient(180deg, rgba(30, 22, 12, 0.9) 0%, rgba(18, 12, 6, 0.95) 100%);
+  border: 1px solid rgba(220, 180, 80, 0.3);
+  border-radius: 12px;
+  backdrop-filter: blur(10px);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.go-score-panel.visible {
+  display: flex;
+}
+
+.go-score-title {
+  font-size: clamp(13px, 2.5vw, 16px);
+  font-weight: 800;
+  color: rgba(255, 220, 100, 0.95);
+  text-shadow: 0 0 12px rgba(255, 200, 50, 0.4);
+  letter-spacing: 0.5px;
+}
+
+.go-score-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  gap: 12px;
+}
+
+.go-score-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  flex: 1;
+  padding: 8px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.go-score-item-label {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.go-score-stone-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.go-score-stone-dot.black {
+  background: radial-gradient(ellipse 65% 55% at 35% 30%, #888 0%, #222 100%);
+  border: 1px solid rgba(0,0,0,0.8);
+}
+
+.go-score-stone-dot.white {
+  background: radial-gradient(ellipse 65% 55% at 35% 30%, #fff 0%, #aaa 100%);
+  border: 1px solid rgba(160,160,160,0.7);
+}
+
+.go-score-number {
+  font-size: clamp(18px, 4vw, 26px);
+  font-weight: 900;
+  color: rgba(255, 255, 255, 0.92);
+  line-height: 1;
+}
+
+.go-score-detail {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.38);
+}
+
+.go-score-winner {
+  font-size: clamp(13px, 2.5vw, 15px);
+  font-weight: 800;
+  color: rgba(255, 220, 80, 0.95);
+  text-align: center;
+  text-shadow: 0 0 16px rgba(255, 200, 50, 0.5);
+}
+
+/* ── 响应式优化 ────────────────────────────────────────────────────────────── */
+@media (max-width: 600px) {
+  .go-status-bar {
+    padding: 6px 12px;
+    font-size: 11px;
+  }
+  .go-btn {
+    padding: 5px 12px;
+    font-size: 11px;
+  }
+}
+
+@media (max-width: 900px) {
+  .go-wrapper {
+    padding: 6px;
+    gap: 6px;
+  }
+  .go-board-outer {
+    border-width: 3px;
+  }
+}
+
+@media (max-width: 375px) {
+  .go-status-bar {
+    padding: 4px 8px;
+    font-size: 10px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  .go-turn-indicator {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .go-btn {
+    padding: 4px 10px;
+    font-size: 10px;
+  }
+}
+
+/* 触屏设备优化 */
+@media (hover: none) and (pointer: coarse) {
+  .go-grid canvas {
+    cursor: default;
+  }
+}

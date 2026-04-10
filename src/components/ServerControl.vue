@@ -10,6 +10,26 @@ const port = ref(3000);
 const address = ref("");
 const loading = ref(false);
 const errorMsg = ref("");
+const copied = ref(false);
+
+async function copyAddress() {
+  if (!serverRunning.value || !address.value) return;
+  try {
+    await navigator.clipboard.writeText(address.value);
+    copied.value = true;
+    setTimeout(() => { copied.value = false; }, 2000);
+  } catch {
+    // 降级：创建临时输入框
+    const el = document.createElement("input");
+    el.value = address.value;
+    document.body.appendChild(el);
+    el.select();
+    document.execCommand("copy");
+    document.body.removeChild(el);
+    copied.value = true;
+    setTimeout(() => { copied.value = false; }, 2000);
+  }
+}
 
 // 二维码
 const qrCanvas = ref(null);
@@ -159,8 +179,18 @@ onUnmounted(() => {
             </div>
           </div>
           <div class="qr-info">
-            <p class="qr-tip">{{ serverRunning ? '扫码加入游戏' : '扫码加入游戏' }}</p>
-            <p class="qr-address">{{ serverRunning ? address : 'http://...' }}</p>
+            <p class="qr-tip">扫码加入游戏</p>
+            <div class="qr-address-wrap">
+              <p
+                class="qr-address"
+                :class="{ clickable: serverRunning, copied }"
+                :title="serverRunning ? '点击复制链接' : ''"
+                @click="copyAddress"
+              >{{ serverRunning ? address : 'http://...' }}</p>
+              <Transition name="toast-fade">
+                <span v-if="copied" class="copy-toast">✅ 复制成功</span>
+              </Transition>
+            </div>
           </div>
         </div>
       </div>
@@ -424,9 +454,69 @@ onUnmounted(() => {
   font-size: 12px;
   color: #a8d8ea;
   font-family: "SF Mono", Monaco, monospace;
-  margin: 0;
+  margin: 0 0 4px 0;
   word-break: break-all;
   user-select: all;
+  transition: color 0.2s;
+}
+
+.qr-address.clickable {
+  cursor: pointer;
+  border-bottom: 1px dashed rgba(168, 216, 234, 0.35);
+  padding-bottom: 1px;
+}
+
+.qr-address.clickable:hover {
+  color: #d0eeff;
+}
+
+.qr-address.clickable:active {
+  opacity: 0.7;
+}
+
+.qr-address.copied {
+  color: #4ade80;
+  border-bottom-color: rgba(74, 222, 128, 0.4);
+}
+
+/* Toast 容器，相对定位供 Toast 绝对定位 */
+.qr-address-wrap {
+  position: relative;
+}
+
+/* 复制成功 Toast */
+.copy-toast {
+  position: absolute;
+  bottom: calc(100% + 6px);
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  background: rgba(30, 40, 30, 0.92);
+  border: 1px solid rgba(74, 222, 128, 0.45);
+  color: #4ade80;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 20px;
+  pointer-events: none;
+  backdrop-filter: blur(6px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+}
+
+/* Toast 出入动画 */
+.toast-fade-enter-active {
+  transition: opacity 0.18s ease, transform 0.18s ease;
+}
+.toast-fade-leave-active {
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.toast-fade-enter-from {
+  opacity: 0;
+  transform: translateX(-50%) translateY(4px);
+}
+.toast-fade-leave-to {
+  opacity: 0;
+  transform: translateX(-50%) translateY(-4px);
 }
 
 /* 操作按钮 */

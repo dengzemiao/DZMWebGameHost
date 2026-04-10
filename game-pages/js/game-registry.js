@@ -41,6 +41,18 @@ const GAME_REGISTRY = {
     cssPath: 'games/gomoku/game.css',
   },
 
+  go: {
+    key: 'go',
+    name: '围棋',
+    icon: '🟤',
+    desc: '经典围棋，19路棋盘，围地多者胜（黑先白后，支持人机对战）',
+    maxPlayers: 2,
+    minPlayers: 2,
+    supportsAI: true,
+    scriptPath: 'games/go/game.js',
+    cssPath: 'games/go/game.css',
+  },
+
   word_spot: {
     key: 'word_spot',
     name: '文字找茬',

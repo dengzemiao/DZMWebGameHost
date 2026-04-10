@@ -11,13 +11,18 @@
  *   notifyGameOver(result) ← 由 room.js 注入
  */
 
-// 动态加载 AI 脚本（ai.js 与 game.js 同目录）
-(function loadAI() {
-  if (window.ChessAI) return;
-  const s = document.createElement('script');
-  s.src = 'games/chess/ai.js';
-  document.head.appendChild(s);
-})();
+// AI Worker 单例（后台线程计算，不阻塞 UI）
+let _chessAIWorker = null;
+function getChessAIWorker() {
+  if (!_chessAIWorker) {
+    try {
+      _chessAIWorker = new Worker('games/chess/ai-worker.js');
+    } catch (e) {
+      console.warn('[Chess] Worker 创建失败，回退到主线程 AI', e);
+    }
+  }
+  return _chessAIWorker;
+}
 
 class ChessGameAdapter {
   constructor(container, config) {
@@ -614,7 +619,7 @@ class ChessGameAdapter {
     dot.className  = `turn-dot ${this.currentTurn}`;
     const isMyTurn = this.currentTurn === this.role;
     const turnLabel = this.currentTurn === 'red' ? '红方' : '黑方';
-    const diffMap = { easy: '简单', normal: '普通', hard: '困难' };
+    const diffMap = { easy: '简单', normal: '普通', hard: '困难', hell: '地狱' };
 
     if (this.isSpectator) {
       text.textContent = `${turnLabel}走棋`;
@@ -837,36 +842,44 @@ class ChessGameAdapter {
     }
   }
 
-  // ── AI 走棋 ──────────────────────────────────────────────────────────────
+  // ── AI 走棋（Web Worker 异步，不阻塞 UI）─────────────────────────────────
   _triggerAI() {
-    if (this.currentTurn === this.role) return; // 还是玩家回合
+    if (this.currentTurn === this.role) return;
     if (this.gameOver) return;
 
-    // 显示 AI 思考
     const aiEl = document.getElementById('chAiThinking');
     if (aiEl) aiEl.classList.add('active');
 
-    // 延迟执行，让 UI 有时间更新
-    const delay = { easy: 300, normal: 500, hard: 800 }[this.difficulty] || 500;
-    setTimeout(() => {
-      if (!window.ChessAI) {
-        if (aiEl) aiEl.classList.remove('active');
-        return;
-      }
-      const mv = ChessAI.bestMove(
-        this.board,
-        this.currentTurn,
-        this.difficulty,
-        ChessRules
-      );
+    const worker = getChessAIWorker();
+    if (!worker) {
       if (aiEl) aiEl.classList.remove('active');
-      if (mv && !this.gameOver) {
-        this._applyMove(mv.fr, mv.fc, mv.tr, mv.tc);
-        this._render();
-        if (this.roomType === 'pv_ai' && typeof this.sendAction === 'function') {
-          this.sendAction({ action: 'sync_state', game_state: this.getStateSnapshot() });
+      return;
+    }
+
+    const boardCopy = this.board.map(row =>
+      row.map(cell => cell ? { type: cell.type, color: cell.color } : null)
+    );
+    const color = this.currentTurn;
+    const difficulty = this.difficulty;
+
+    const delay = { easy: 200, normal: 300, hard: 300, hell: 300 }[difficulty] || 300;
+
+    setTimeout(() => {
+      worker.onmessage = (e) => {
+        if (aiEl) aiEl.classList.remove('active');
+        const mv = e.data.move;
+        if (mv && !this.gameOver) {
+          this._applyMove(mv.fr, mv.fc, mv.tr, mv.tc);
+          this._render();
+          if (this.roomType === 'pv_ai' && typeof this.sendAction === 'function') {
+            this.sendAction({ action: 'sync_state', game_state: this.getStateSnapshot() });
+          }
         }
-      }
+      };
+      worker.onerror = () => {
+        if (aiEl) aiEl.classList.remove('active');
+      };
+      worker.postMessage({ board: boardCopy, color, difficulty });
     }, delay);
   }
 

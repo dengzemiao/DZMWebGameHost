@@ -34,6 +34,7 @@ pub enum AiDifficulty {
     Easy,
     Normal,
     Hard,
+    Hell,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq)]
@@ -147,8 +148,8 @@ impl Room {
                 let has_red = existing_players.iter().any(|p| p.role == "red");
                 if !has_red { "red".to_string() } else { "black".to_string() }
             }
-            "gomoku" => {
-                // 五子棋：黑方先手，优先分配黑方
+            "gomoku" | "go" => {
+                // 五子棋/围棋：黑方先手，优先分配黑方
                 let has_black = existing_players.iter().any(|p| p.role == "black");
                 if !has_black { "black".to_string() } else { "white".to_string() }
             }

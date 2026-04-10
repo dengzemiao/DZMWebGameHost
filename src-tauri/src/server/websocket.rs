@@ -386,6 +386,7 @@ fn parse_ai_difficulty(s: Option<&str>) -> Option<AiDifficulty> {
         Some("easy") => Some(AiDifficulty::Easy),
         Some("normal") => Some(AiDifficulty::Normal),
         Some("hard") => Some(AiDifficulty::Hard),
+        Some("hell") => Some(AiDifficulty::Hell),
         _ => None,
     }
 }
