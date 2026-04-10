@@ -34,14 +34,14 @@ function checkWin(board, r, c, color, SIZE) {
 // GomokuAI
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const FIVE       = 1000000;
-const LIVE_FOUR  = 100000;
-const RUSH_FOUR  = 10000;
-const LIVE_THREE = 8000;
-const SLEEP_THREE = 500;
-const LIVE_TWO   = 600;
-const SLEEP_TWO  = 80;
-const LIVE_ONE   = 20;
+const FIVE        = 1000000;
+const LIVE_FOUR   = 100000;
+const RUSH_FOUR   = 15000;
+const LIVE_THREE  = 8000;
+const SLEEP_THREE = 600;
+const LIVE_TWO    = 700;
+const SLEEP_TWO   = 100;
+const LIVE_ONE    = 30;
 
 function analyzeDir(board, r, c, dr, dc, color, SIZE) {
   let fwd = 0, nr = r + dr, nc = c + dc;
@@ -80,9 +80,9 @@ function evaluatePos(board, r, c, color, SIZE) {
     if (count === 3 && openEnds === 2) liveThrees++;
     if (count === 4 && openEnds >= 1)  rushFours++;
   }
-  if (liveThrees >= 2) score += 50000;
-  if (rushFours >= 1 && liveThrees >= 1) score += 60000;
-  if (rushFours >= 2) score += 70000;
+  if (liveThrees >= 2) score += 60000;
+  if (rushFours >= 1 && liveThrees >= 1) score += 80000;
+  if (rushFours >= 2) score += 90000;
   board[r][c] = null;
   return score;
 }
@@ -106,7 +106,7 @@ function evaluateBoard(board, color, SIZE) {
       defTotal += evaluatePos(board, r, c, opp,   SIZE);
     }
   }
-  return atkTotal * 1.05 - defTotal;
+  return atkTotal * 1.1 - defTotal;
 }
 
 function getCandidates(board, SIZE, range) {
@@ -259,23 +259,44 @@ function bestMove(board, color, difficulty, SIZE) {
   }
 
   if (difficulty === 'hell') {
-    _deadline = Date.now() + 10000;
+    _deadline = Date.now() + 15000;
     _timedOut = false;
     _nodeCount = 0;
-    const topN = Math.min(sorted.length, 15);
+    const topN = Math.min(sorted.length, 20);
     const top = sorted.slice(0, topN);
     let bestScore = -Infinity, bestMv = top[0];
+
+    // 迭代加深：先用浅层搜索得到一个保底结果，再尝试深层搜索
     for (const pos of top) {
       board[pos.r][pos.c] = { color };
       if (checkWin(board, pos.r, pos.c, color, SIZE)) {
         board[pos.r][pos.c] = null;
         return pos;
       }
-      const val = minimax(board, 4, -Infinity, Infinity, false, color, SIZE, 12);
+      const val = minimax(board, 4, -Infinity, Infinity, false, color, SIZE, 15);
       board[pos.r][pos.c] = null;
       if (val > bestScore) { bestScore = val; bestMv = pos; }
       if (_timedOut) break;
     }
+
+    // 深层搜索（depth 6），在剩余时间内尝试更深的分析
+    if (!_timedOut) {
+      let deepBest = -Infinity, deepMv = bestMv;
+      for (const pos of top) {
+        if (_timedOut) break;
+        board[pos.r][pos.c] = { color };
+        if (checkWin(board, pos.r, pos.c, color, SIZE)) {
+          board[pos.r][pos.c] = null;
+          return pos;
+        }
+        const val = minimax(board, 6, -Infinity, Infinity, false, color, SIZE, 15);
+        board[pos.r][pos.c] = null;
+        if (val > deepBest) { deepBest = val; deepMv = pos; }
+        if (_timedOut) break;
+      }
+      bestMv = deepMv;
+    }
+
     return bestMv;
   }
 
