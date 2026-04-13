@@ -1,0 +1,301 @@
+/* ── 超级方块（Color Lines）游戏样式 ────────────────────────────────────── */
+
+.cl-wrapper {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  background: var(--bg-primary, #0d1117);
+  color: var(--text-pri, #e6edf3);
+  font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+  user-select: none;
+}
+
+/* ── 顶部状态条 ──────────────────────────────────────────────────────────── */
+.cl-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 16px;
+  background: var(--bg-secondary, #161b22);
+  border-bottom: 1px solid var(--border, #30363d);
+  flex-shrink: 0;
+}
+
+.cl-score {
+  font-size: 26px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #f0a500;
+  min-width: 80px;
+}
+
+.cl-score-label {
+  font-size: 12px;
+  color: var(--text-sec, #8b949e);
+  font-weight: 500;
+}
+
+.cl-diff-label {
+  font-size: 13px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  white-space: nowrap;
+}
+
+.cl-diff-easy { background: rgba(63,185,80,0.15); color: #3fb950; }
+.cl-diff-normal { background: rgba(88,166,255,0.15); color: #58a6ff; }
+.cl-diff-hard { background: rgba(240,136,62,0.15); color: #f0883e; }
+.cl-diff-hell { background: rgba(248,81,73,0.15); color: #f85149; }
+
+.cl-next-hint {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 12px;
+  color: var(--text-sec, #8b949e);
+}
+
+.cl-next-balls {
+  display: flex;
+  gap: 3px;
+}
+
+.cl-next-ball {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+/* ── 游戏区域 ──────────────────────────────────────────────────────────── */
+.cl-game-area {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+/* ── 等待中视图 ──────────────────────────────────────────────────────────── */
+.cl-waiting {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 32px 24px;
+  text-align: center;
+}
+
+.cl-waiting-icon { font-size: 56px; line-height: 1; }
+.cl-waiting-title { font-size: 22px; font-weight: 700; color: var(--text-pri, #e6edf3); }
+.cl-waiting-desc { font-size: 14px; color: var(--text-sec, #8b949e); margin-bottom: 8px; }
+
+.cl-start-btn {
+  padding: 12px 36px;
+  font-size: 16px;
+  font-weight: 600;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  background: linear-gradient(135deg, #238636, #2ea043);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(46, 160, 67, 0.4);
+  transition: opacity 0.2s, transform 0.1s;
+}
+.cl-start-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+.cl-start-btn:active { transform: translateY(0); }
+
+/* ── 难度选择器 ──────────────────────────────────────────────────────────── */
+.cl-diff-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  max-width: 340px;
+}
+
+.cl-diff-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.cl-diff-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 10px 14px;
+  min-width: 66px;
+  border: 1.5px solid var(--border, #30363d);
+  border-radius: 10px;
+  background: var(--bg-secondary, #161b22);
+  color: var(--text-sec, #8b949e);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, color 0.2s, transform 0.1s;
+  font-family: inherit;
+}
+.cl-diff-btn:hover { border-color: #58a6ff; color: var(--text-pri, #e6edf3); transform: translateY(-1px); }
+.cl-diff-btn.active { border-color: #58a6ff; background: rgba(88,166,255,0.12); color: #e6edf3; }
+.cl-diff-btn[data-diff="easy"].active { border-color: #3fb950; background: rgba(63,185,80,0.12); }
+.cl-diff-btn[data-diff="hard"].active { border-color: #f0883e; background: rgba(240,136,62,0.12); }
+.cl-diff-btn[data-diff="hell"].active { border-color: #f85149; background: rgba(248,81,73,0.12); }
+
+.cl-diff-label-text { font-size: 13px; font-weight: 700; line-height: 1; }
+.cl-diff-size-text { font-size: 11px; opacity: 0.7; line-height: 1; }
+
+/* ── 棋盘 ──────────────────────────────────────────────────────────────── */
+.cl-board {
+  display: grid;
+  grid-template-columns: repeat(9, var(--cl-cell, 48px));
+  grid-template-rows: repeat(9, var(--cl-cell, 48px));
+  gap: 2px;
+  background: var(--bg-secondary, #161b22);
+  border: 2px solid var(--border, #30363d);
+  border-radius: 8px;
+  padding: 4px;
+}
+
+.cl-cell {
+  width: var(--cl-cell, 48px);
+  height: var(--cl-cell, 48px);
+  background: #0d1117;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.15s;
+}
+.cl-cell:hover { background: #1a2030; }
+.cl-cell.path-hint { background: rgba(88,166,255,0.08); }
+.cl-cell.selected-cell { background: rgba(240,176,0,0.12); }
+
+/* ── 方块（球） ──────────────────────────────────────────────────────────── */
+.cl-ball {
+  width: 80%;
+  height: 80%;
+  border-radius: 50%;
+  position: absolute;
+  transition: transform 0.15s ease;
+  box-shadow: inset -3px -3px 6px rgba(0,0,0,0.4), inset 3px 3px 6px rgba(255,255,255,0.15);
+}
+
+/* 9种颜色 */
+.cl-ball.c0 { background: radial-gradient(circle at 35% 35%, #ff6b6b, #c0392b); }
+.cl-ball.c1 { background: radial-gradient(circle at 35% 35%, #74b9ff, #2980b9); }
+.cl-ball.c2 { background: radial-gradient(circle at 35% 35%, #55efc4, #00b894); }
+.cl-ball.c3 { background: radial-gradient(circle at 35% 35%, #fdcb6e, #f39c12); }
+.cl-ball.c4 { background: radial-gradient(circle at 35% 35%, #a29bfe, #6c5ce7); }
+.cl-ball.c5 { background: radial-gradient(circle at 35% 35%, #fd79a8, #e84393); }
+.cl-ball.c6 { background: radial-gradient(circle at 35% 35%, #ffeaa7, #fdcb6e); }
+.cl-ball.c7 { background: radial-gradient(circle at 35% 35%, #81ecec, #00cec9); }
+.cl-ball.c8 { background: radial-gradient(circle at 35% 35%, #dfe6e9, #b2bec3); }
+
+/* 选中弹跳 */
+.cl-ball.selected {
+  animation: cl-bounce 0.6s ease infinite;
+}
+
+@keyframes cl-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-20%); }
+}
+
+/* 新增动画 */
+.cl-ball.appear {
+  animation: cl-appear 0.3s ease forwards;
+}
+
+@keyframes cl-appear {
+  0% { transform: scale(0); opacity: 0; }
+  60% { transform: scale(1.15); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+/* 消除动画 */
+.cl-ball.removing {
+  animation: cl-remove 0.35s ease forwards;
+}
+
+@keyframes cl-remove {
+  0% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.2); opacity: 0.8; }
+  100% { transform: scale(0); opacity: 0; }
+}
+
+/* 移动动画 */
+.cl-ball.moving {
+  transition: none;
+  animation: cl-move-pop 0.15s ease;
+}
+
+@keyframes cl-move-pop {
+  0% { transform: scale(0.8); }
+  50% { transform: scale(1.1); }
+  100% { transform: scale(1); }
+}
+
+/* ── 游戏结束叠加层 ──────────────────────────────────────────────────────── */
+.cl-gameover-overlay {
+  position: absolute;
+  inset: 0;
+  background: rgba(13,17,23,0.85);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  z-index: 10;
+  animation: cl-fadein 0.3s ease;
+}
+
+@keyframes cl-fadein {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.cl-gameover-icon { font-size: 48px; }
+.cl-gameover-title { font-size: 22px; font-weight: 700; color: #f0a500; }
+.cl-gameover-score { font-size: 16px; color: var(--text-sec, #8b949e); }
+.cl-gameover-score strong { color: #f0a500; font-size: 28px; }
+
+.cl-replay-btn {
+  padding: 11px 40px;
+  font-size: 15px;
+  font-weight: 600;
+  border: none;
+  border-radius: 10px;
+  cursor: pointer;
+  background: linear-gradient(135deg, #1f6feb, #388bfd);
+  color: #fff;
+  box-shadow: 0 4px 16px rgba(56, 139, 253, 0.35);
+  transition: opacity 0.2s, transform 0.1s;
+  margin-top: 8px;
+}
+.cl-replay-btn:hover { opacity: 0.9; transform: translateY(-1px); }
+.cl-replay-btn:active { transform: translateY(0); }
+
+/* ── 观战视图 ──────────────────────────────────────────────────────────── */
+.cl-spectator-info {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  transform: translateX(-50%);
+  font-size: 12px;
+  color: var(--text-sec, #8b949e);
+  background: rgba(22,27,34,0.9);
+  padding: 4px 12px;
+  border-radius: 20px;
+  border: 1px solid var(--border, #30363d);
+  z-index: 5;
+}

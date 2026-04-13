@@ -266,7 +266,7 @@ async fn handle_message(lobby: &Lobby, session_id: usize, ip: String, msg: serde
             }
         }
 
-        // ── 文字找茬：房主开始游戏 ────────────────────────────────────────────────────
+        // ── 文字找茬/超级方块：房主开始游戏 ────────────────────────────────────────────────────
         "start_game" => {
             let difficulty = msg.get("difficulty")
                 .and_then(|v| v.as_str())
@@ -277,7 +277,27 @@ async fn handle_message(lobby: &Lobby, session_id: usize, ip: String, msg: serde
                 "easy" | "normal" | "hard" | "hell" => difficulty,
                 _ => "easy".to_string(),
             };
-            match lobby.start_round(session_id, difficulty).await {
+
+            // 判断当前房间的游戏类型，分别走不同逻辑
+            let game_type = {
+                let room_id = {
+                    let sr = lobby.session_rooms.read().await;
+                    sr.get(&session_id).cloned()
+                };
+                if let Some(rid) = room_id {
+                    let rooms = lobby.rooms.read().await;
+                    rooms.get(&rid).map(|r| r.game.clone())
+                } else {
+                    None
+                }
+            };
+
+            let result = match game_type.as_deref() {
+                Some("color_lines") => lobby.start_color_lines(session_id, difficulty).await,
+                _ => lobby.start_round(session_id, difficulty).await,
+            };
+
+            match result {
                 Ok(()) => {
                     let name = get_player_name(lobby, session_id).await;
                     let room_id = {

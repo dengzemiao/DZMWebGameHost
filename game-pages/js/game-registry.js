@@ -65,6 +65,18 @@ const GAME_REGISTRY = {
     cssPath: 'games/word-spot/game.css',
   },
 
+  color_lines: {
+    key: 'color_lines',
+    name: '超级方块',
+    icon: '🟦',
+    desc: '经典消除游戏，移动同色方块连成5个消除，策略与规划的考验',
+    maxPlayers: 1,
+    minPlayers: 1,
+    supportsAI: false,
+    scriptPath: 'games/color-lines/game.js',
+    cssPath: 'games/color-lines/game.css',
+  },
+
   // ── 继续添加更多游戏 ────────────────────────────────────────────────────────
   // example: {
   //   key: 'example',

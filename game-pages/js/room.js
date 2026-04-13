@@ -154,9 +154,9 @@
     // 房间状态变为 playing → 启动游戏（特别是第二个玩家加入的情况）
     // 关键：只在状态变化时调用一次 onGameStart，避免重复触发
     if (gameAdapter && room.state === 'playing' && prevState !== 'playing') {
-      if (room.game === 'word_spot') {
-        // word_spot: 游戏开始由 game_started WS 消息驱动，此处不自动触发
-        console.log('[Room] room_updated: word_spot state changed to playing, waiting for game_started');
+      if (room.game === 'word_spot' || room.game === 'color_lines') {
+        // word_spot/color_lines: 游戏开始由 game_started WS 消息驱动，此处不自动触发
+        console.log('[Room] room_updated: start_game driven game state changed to playing, waiting for game_started');
       } else {
         console.log('[Room] room_updated: state changed to playing, calling onGameStart');
         gameAdapter.gameStarted = true;
@@ -198,9 +198,9 @@
     $('gameOverModal').classList.remove('show');
     if (gameAdapter && typeof gameAdapter.reset === 'function') {
       gameAdapter.reset();
-      if (roomData && roomData.game === 'word_spot') {
-        // word_spot: reset 带回等待页，由 player1 手动点击开始游戏
-        console.log('[Room] game_restart: word_spot reset to waiting');
+      if (roomData && (roomData.game === 'word_spot' || roomData.game === 'color_lines')) {
+        // word_spot/color_lines: reset 带回等待页，由 player1 手动点击开始游戏
+        console.log('[Room] game_restart: start_game driven game reset to waiting');
       } else {
         // 其他游戏：重置并自动开始
         gameAdapter.gameStarted = true;
@@ -370,10 +370,11 @@
           </div>`);
       } else {
         // PvP 空位：仅在有参战玩家且存在空位时，允许点击换到此位
-        // word_spot: 席位号即权限顺序，禁止手动换座，由服务端自动分配保证连续性
+        // word_spot/color_lines: 席位号即权限顺序，禁止手动换座，由服务端自动分配保证连续性
         const amPlayer = room.players.some(p => p.session_id === ws.sessionId);
         const canSwitchSeat = !isPvAI && amPlayer
           && room.game !== 'word_spot'
+          && room.game !== 'color_lines'
           && room.players.length < (room.max_players || 2);
         // roleForSlot 已在外层声明，此处直接使用
         const emptyClickable = canSwitchSeat && roleForSlot ? `
@@ -449,9 +450,11 @@
 
     const isPvAI = room.room_type === 'pv_ai';
     const isWordSpot = room.game === 'word_spot';
+    const isColorLines = room.game === 'color_lines';
+    const isStartGameDriven = isWordSpot || isColorLines;
 
-    // word_spot: 游戏中不显示认输按钮；申请参战按钮保持可见但在游戏中禁用
-    if (isWordSpot) {
+    // word_spot/color_lines: 游戏中不显示认输按钮；申请参战按钮保持可见但在游戏中禁用
+    if (isStartGameDriven) {
       btnSpectate.style.display = amPlayer ? '' : 'none';
       if (amSpectator) {
         // 观战者始终显示申请参战按钮，游戏进行中或席位已满时禁用
@@ -461,7 +464,7 @@
         btnParticipate.style.display = 'none';
         btnParticipate.disabled = false;
       }
-      btnSurrender.style.display = 'none'; // word_spot 无认输
+      btnSurrender.style.display = 'none';
       return;
     }
 
@@ -519,8 +522,8 @@
       // 元素不存在（可能已被移除），直接返回
       return;
     }
-    // word_spot: 等待提示由适配器自行处理
-    if (room.game === 'word_spot') {
+    // word_spot/color_lines: 等待提示由适配器自行处理
+    if (room.game === 'word_spot' || room.game === 'color_lines') {
       waiting.style.display = 'none';
       return;
     }
@@ -632,8 +635,8 @@
       gameAdapter.restoreGameState(room.game_state);
     }
 
-    if (room.game === 'word_spot') {
-      // word_spot: onGameStart 仅用于初始化UI，实际开始由 game_started 消息驱动
+    if (room.game === 'word_spot' || room.game === 'color_lines') {
+      // word_spot/color_lines: onGameStart 仅用于初始化UI，实际开始由 game_started 消息驱动
       gameAdapter.onGameStart && gameAdapter.onGameStart(room);
       // 如果已有缓冲的 game_started 消息，立即应用
       if (pendingGameStarted && typeof gameAdapter.onGameStarted === 'function') {
@@ -795,7 +798,7 @@
     if (game === 'gomoku' || game === 'go') {
       return role === 'black' ? '黑方' : role === 'white' ? '白方' : role;
     }
-    if (game === 'word_spot') {
+    if (game === 'word_spot' || game === 'color_lines') {
       if (role === 'player1') return '1号位(房主)';
       const n = role && role.match(/^player(\d+)$/);
       return n ? `${n[1]}号位` : (role || '观战');
@@ -807,7 +810,7 @@
   function getRoleForSeatIndex(game, index) {
     if (game === 'chess') return index === 0 ? 'red' : index === 1 ? 'black' : null;
     if (game === 'gomoku' || game === 'go') return index === 0 ? 'black' : index === 1 ? 'white' : null;
-    if (game === 'word_spot') return `player${index + 1}`;
+    if (game === 'word_spot' || game === 'color_lines') return `player${index + 1}`;
     return null;
   }
 
@@ -822,7 +825,7 @@
   function getRoleCssClass(game, role) {
     if (game === 'chess') return role === 'red' ? 'red' : 'black';
     if (game === 'gomoku' || game === 'go') return role === 'black' ? 'black' : 'white';
-    if (game === 'word_spot') return role === 'player1' ? 'host' : 'player';
+    if (game === 'word_spot' || game === 'color_lines') return role === 'player1' ? 'host' : 'player';
     return role;
   }
 

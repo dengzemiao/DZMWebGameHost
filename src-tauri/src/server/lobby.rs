@@ -153,8 +153,8 @@ impl Room {
                 let has_black = existing_players.iter().any(|p| p.role == "black");
                 if !has_black { "black".to_string() } else { "white".to_string() }
             }
-            "word_spot" => {
-                // 文字找茬：找最小可用编号（填补空缺），保证 player1 始终被优先占满
+            "word_spot" | "color_lines" => {
+                // 找最小可用编号（填补空缺），保证 player1 始终被优先占满
                 let mut num = 1usize;
                 loop {
                     let role = format!("player{}", num);
@@ -504,8 +504,8 @@ impl Lobby {
             }
             room.spectators.push(session_id);
         } else {
-            // 文字找茬：游戏进行中不允许新玩家加入参战，强制切换为观战
-            if room.game == "word_spot" && room.state == RoomState::Playing {
+            // 文字找茬/超级方块：游戏进行中不允许新玩家加入参战，强制切换为观战
+            if (room.game == "word_spot" || room.game == "color_lines") && room.state == RoomState::Playing {
                 if !room.allow_spectate {
                     return Err("进行中不能加入".to_string());
                 }
@@ -531,8 +531,8 @@ impl Lobby {
                     room.players.push(RoomPlayer { session_id, name: player_name, role, ip: ip.clone(), disconnected: false });
 
                     // PvAI 模式：第 1 个玩家加入就开始游戏；PvP 模式：人数满时才开始
-                    // word_spot 需要房主手动开始，不自动 Playing
-                    if room.room_type == RoomType::PvAI || (room.game != "word_spot" && room.players.len() >= room.max_players) {
+                    // word_spot/color_lines 需要房主手动开始，不自动 Playing
+                    if room.room_type == RoomType::PvAI || (room.game != "word_spot" && room.game != "color_lines" && room.players.len() >= room.max_players) {
                         room.state = RoomState::Playing;
                     }
                 }
@@ -659,16 +659,16 @@ impl Lobby {
             .find(|p| p.session_id == session_id)
             .map(|p| p.ip.clone());
 
-        // 文字找茬：如果游戏进行中，将玩家标记为弃赛，不直接将房间状态调为 Waiting
-        let is_word_spot_playing = room.game == "word_spot" && room.state == RoomState::Playing;
-        let player_in_game = is_word_spot_playing && room.players.iter().any(|p| p.session_id == session_id);
+        // 文字找茬/超级方块：游戏进行中离开的特殊处理
+        let is_start_game_driven_playing = (room.game == "word_spot" || room.game == "color_lines") && room.state == RoomState::Playing;
+        let player_in_game = is_start_game_driven_playing && room.players.iter().any(|p| p.session_id == session_id);
         
         room.players.retain(|p| p.session_id != session_id);
         room.spectators.retain(|&s| s != session_id);
         room.surrender_votes.retain(|&s| s != session_id);
 
-        // 文字找茬：重新分配剩余参战玩家角色，保证 player1 始终存在
-        if room.game == "word_spot" {
+        // 文字找茬/超级方块：重新分配剩余参战玩家角色，保证 player1 始终存在
+        if room.game == "word_spot" || room.game == "color_lines" {
             reassign_word_spot_roles(&mut room.players);
         }
 
@@ -689,7 +689,7 @@ impl Lobby {
             self.round_final_leaderboards.write().await.remove(&room_id);
             // 通知所有人（大厅+其他房间）房间已消失
             self.broadcast_room_list().await;
-        } else if is_word_spot_playing && player_in_game {
+        } else if is_start_game_driven_playing && player_in_game && room.game == "word_spot" {
             // 文字找茬游戏中玩家退出：标记为弃赛，不改房间状态
             let snapshot = room.clone();
             drop(rooms);
@@ -731,6 +731,13 @@ impl Lobby {
             if should_end {
                 self.end_round(&room_id, "all_done").await;
             }
+        } else if room.game == "color_lines" && room.state == RoomState::Playing && !player_in_game {
+            // 超级方块：观战者离开不影响游戏，仅广播房间更新
+            let mut snapshot = room.clone();
+            drop(rooms);
+            snapshot.game_state = self.get_room_game_state(&room_id).await;
+            self.broadcast_room_update(&snapshot).await;
+            self.broadcast_room_list().await;
         } else {
             let was_playing = room.state == RoomState::Playing;
             
@@ -762,7 +769,57 @@ impl Lobby {
 
     // ── 文字找茬：回合管理 ─────────────────────────────────────────────────────────────
 
-    /// 房主(player1)发起开始游戏
+    /// 超级方块：房主(player1)发起开始游戏
+    pub async fn start_color_lines(&self, session_id: usize, difficulty: String) -> Result<(), String> {
+        let room_id = {
+            let sr = self.session_rooms.read().await;
+            sr.get(&session_id).cloned().ok_or_else(|| "不在任何房间中".to_string())?
+        };
+
+        let all_player_ids = {
+            let mut rooms = self.rooms.write().await;
+            let room = rooms.get_mut(&room_id).ok_or_else(|| "房间不存在".to_string())?;
+
+            if room.game != "color_lines" {
+                return Err("不是超级方块房间".to_string());
+            }
+            let is_host = room.players.iter().any(|p| p.session_id == session_id && p.role == "player1");
+            if !is_host {
+                return Err("只有房主可以开始游戏".to_string());
+            }
+            if room.players.is_empty() {
+                return Err("至少需要 1 个参战玩家".to_string());
+            }
+            if room.state == RoomState::Playing {
+                return Err("游戏已在进行中".to_string());
+            }
+
+            room.state = RoomState::Playing;
+            room.get_all_session_ids()
+        };
+
+        // 广播开始消息（纯客户端游戏，不需要服务端管理 round_state）
+        let start_msg = serde_json::json!({
+            "type": "game_started",
+            "difficulty": difficulty
+        }).to_string();
+        self.broadcast_to_sessions(&all_player_ids, &start_msg).await;
+
+        // 同步广播 room_updated
+        {
+            let rooms = self.rooms.read().await;
+            if let Some(room) = rooms.get(&room_id) {
+                let snap = room.clone();
+                drop(rooms);
+                self.broadcast_room_update(&snap).await;
+                self.broadcast_room_list().await;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// 房主(player1)发起开始游戏（文字找茬）
     pub async fn start_round(&self, session_id: usize, difficulty: String) -> Result<(), String> {
         let room_id = {
             let sr = self.session_rooms.read().await;
@@ -1026,6 +1083,7 @@ impl Lobby {
 
         if to_spectator {
             let is_word_spot_playing = room.game == "word_spot" && room.state == RoomState::Playing;
+            let is_color_lines_playing = room.game == "color_lines" && room.state == RoomState::Playing;
             let was_player = room.players.iter().any(|p| p.session_id == session_id);
             
             room.players.retain(|p| p.session_id != session_id);
@@ -1033,11 +1091,14 @@ impl Lobby {
                 room.spectators.push(session_id);
             }
             // 文字找茬游戏中切换观战：不改房间状态，视为弃赛处理
-            if !is_word_spot_playing && room.state == RoomState::Playing {
+            // 超级方块游戏中切换观战：回到等待状态
+            if is_color_lines_playing {
+                room.state = RoomState::Waiting;
+            } else if !is_word_spot_playing && room.state == RoomState::Playing {
                 room.state = RoomState::Waiting;
             }
-            // 文字找茬：重新分配剩余参战玩家角色，保证 player1 始终存在
-            if room.game == "word_spot" {
+            // 文字找茬/超级方块：重新分配剩余参战玩家角色，保证 player1 始终存在
+            if room.game == "word_spot" || room.game == "color_lines" {
                 reassign_word_spot_roles(&mut room.players);
             }
             // 清除 IP 房间映射（不再占席位）
@@ -1084,8 +1145,8 @@ impl Lobby {
                 }
             }
         } else {
-            // 文字找茬：游戏进行中不允许申请参战
-            if room.game == "word_spot" && room.state == RoomState::Playing {
+            // 文字找茬/超级方块：游戏进行中不允许申请参战
+            if (room.game == "word_spot" || room.game == "color_lines") && room.state == RoomState::Playing {
                 drop(rooms);
                 return Err("游戏进行中，本轮结束后才可申请参战".to_string());
             }
@@ -1096,7 +1157,7 @@ impl Lobby {
             let role = Room::assign_role(&room.game, &room.players);
             room.players.push(RoomPlayer { session_id, name: player_name, role, ip: ip.clone(), disconnected: false });
 
-            if room.game != "word_spot" && room.players.len() >= room.max_players {
+            if room.game != "word_spot" && room.game != "color_lines" && room.players.len() >= room.max_players {
                 room.state = RoomState::Playing;
             }
             drop(rooms);
@@ -1130,9 +1191,9 @@ impl Lobby {
             return Err("人机模式不可换位".to_string());
         }
 
-        if room.game == "word_spot" {
+        if room.game == "word_spot" || room.game == "color_lines" {
             drop(rooms);
-            return Err("文字找茬席位由服务端自动分配，不支持手动换座".to_string());
+            return Err("该游戏席位由服务端自动分配，不支持手动换座".to_string());
         }
 
         let me = room.players.iter().find(|p| p.session_id == session_id);
@@ -1211,18 +1272,18 @@ impl Lobby {
         };
 
         // 预检查：获取游戏类型和玩家身份
-        let (is_word_spot, is_valid) = {
+        let (is_start_game_driven, is_valid) = {
             let rooms = self.rooms.read().await;
             if let Some(room) = rooms.get(&room_id) {
-                let is_ws = room.game == "word_spot";
-                let valid = if is_ws {
-                    // word_spot 仅房主（player1）可重置
+                let is_sgd = room.game == "word_spot" || room.game == "color_lines";
+                let valid = if is_sgd {
+                    // word_spot/color_lines 仅房主（player1）可重置
                     room.players.iter().any(|p| p.session_id == session_id && p.role == "player1")
                 } else {
                     // 其他游戏任意参战玩家可重置
                     room.players.iter().any(|p| p.session_id == session_id)
                 };
-                (is_ws, valid)
+                (is_sgd, valid)
             } else {
                 return None;
             }
@@ -1231,7 +1292,7 @@ impl Lobby {
         if !is_valid { return None; }
 
         // word_spot：在获取 rooms 写锁前，先取消倒计时并清理回合状态（避免死锁）
-        if is_word_spot {
+        if is_start_game_driven {
             if let Some(tx) = self.round_cancel_txs.write().await.remove(&room_id) {
                 let _ = tx.send(());
             }
@@ -1242,9 +1303,9 @@ impl Lobby {
         let room = rooms.get_mut(&room_id)?;
 
         room.surrender_votes.clear();
-        // word_spot 始终回到 Waiting（房主需重新点击开始）
+        // word_spot/color_lines 始终回到 Waiting（房主需重新点击开始）
         // PvAI 模式：始终设为 Playing；PvP 模式：人数满时设为 Playing，否则 Waiting
-        if is_word_spot {
+        if is_start_game_driven {
             room.state = RoomState::Waiting;
         } else if room.room_type == RoomType::PvAI || room.players.len() >= room.max_players {
             room.state = RoomState::Playing;

@@ -245,10 +245,16 @@
         const pvaiItem = document.querySelector('#roomTypeGroup [data-value="pv_ai"]');
         if (pvaiItem) pvaiItem.style.display = game && game.supportsAI ? '' : 'none';
         // word_spot 专属配置行显隐
-        const isWordSpot = selectedGame === 'word_spot';
+        const isWS = selectedGame === 'word_spot';
         ['wordSpotRow', 'wordSpotLevelRow', 'wordSpotTimeRow'].forEach(id => {
-          $(id).style.display = isWordSpot ? '' : 'none';
+          $(id).style.display = isWS ? '' : 'none';
         });
+        // 超级方块/文字找茬：隐藏 PvAI 选项
+        const isStartDriven = isWS || selectedGame === 'color_lines';
+        if (isStartDriven) {
+          setRadioActive('roomTypeGroup', 'pvp');
+          $('aiDifficultyRow').style.display = 'none';
+        }
       });
     });
   }
@@ -296,7 +302,9 @@
   $('btnConfirmCreate').addEventListener('click', () => {
     const name = $('roomNameInput').value.trim() || generateRoomName();
     const isWordSpot = selectedGame === 'word_spot';
-    const roomType = isWordSpot ? 'pvp' : (getRadioValue('roomTypeGroup') || 'pvp');
+    const isColorLines = selectedGame === 'color_lines';
+    const isStartGameDriven = isWordSpot || isColorLines;
+    const roomType = isStartGameDriven ? 'pvp' : (getRadioValue('roomTypeGroup') || 'pvp');
     const aiDifficulty = roomType === 'pv_ai' ? (getRadioValue('aiDifficultyGroup') || 'normal') : null;
     const allowSpectate = $('allowSpectate').checked;
     const game = window.getGame(selectedGame) || window.getAllGames()[0];
@@ -309,7 +317,7 @@
     const config = {
       name,
       game: selectedGame,
-      max_players: isWordSpot ? parseInt($('wsMaxPlayers').value, 10) : (roomType === 'pv_ai' ? 1 : game.maxPlayers),
+      max_players: isWordSpot ? parseInt($('wsMaxPlayers').value, 10) : (isColorLines ? 1 : (roomType === 'pv_ai' ? 1 : game.maxPlayers)),
       room_type: roomType,
       ai_difficulty: aiDifficulty,
       allow_spectate: allowSpectate,
